@@ -1,0 +1,37 @@
+{
+  "name": "monarch-money-remote-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Single-tenant Cloud Run bridge exposing Monarch Money as MCP (for Claude) and REST (for Custom GPT Actions)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "deploy": "node scripts/deploy.ts",
+    "deploy:bootstrap": "node scripts/deploy.ts --bootstrap",
+    "deploy:rotate-secrets": "node scripts/deploy.ts --rotate-secrets",
+    "deploy:new-client": "node scripts/deploy.ts --new-client",
+    "deploy:list-clients": "node scripts/deploy.ts --list-clients",
+    "deploy:remove-client": "node scripts/deploy.ts --remove-client"
+  },
+  "dependencies": {
+    "@google-cloud/secret-manager": "^6.1.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-auth": "^1.6.11",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.5.2",
+    "jose": "^6.2.3",
+    "monarchmoney": "^1.1.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2"
+  }
+}

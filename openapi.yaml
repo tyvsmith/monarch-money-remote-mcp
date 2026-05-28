@@ -1,0 +1,638 @@
+openapi: 3.1.0
+info:
+  title: Monarch Money Bridge
+  version: 0.3.0
+  description: |
+    Read-only access to the user's Monarch Money account. Endpoints cover
+    accounts, balances, transactions, budgets, cashflow, recurring bills,
+    savings goals, merchants, categories, tags, institutions, net worth, and
+    Monarch's dashboard insights.
+
+    **Authentication.** Send `X-API-Key: <WRAPPER_API_KEY>` on every request.
+
+    **Guidance for the assistant:**
+    - Prefer compact responses. On `/accounts` always pass
+      `verbosity=ultra-light` unless the user explicitly needs balance history,
+      account type details, or institution metadata — payload shrinks ~99%.
+    - For "how much did I spend on X" use `/transactions?search=X` and sum
+      client-side. Bump `limit` (max 500) and use `offset` for older pages.
+    - For period-aggregated questions ("what did I spend in 2024", "show me
+      Q3 by category") use `/cashflow` (grouped by category) or
+      `/cashflow/summary` (just totals) — both are orders of magnitude smaller
+      than scanning transactions.
+    - Date params accept `YYYY-MM-DD`. Endpoints that take a date range default
+      to the current month when both are omitted; pass `startDate`/`endDate`
+      to widen.
+    - `absAmountRange` is a string of the form `"min,max"`; either bound may
+      be empty (`"50"` ≥$50, `",100"` ≤$100, `"50,200"` between).
+    - All endpoints are read-only. There are no write/create/update/delete
+      operations on this surface.
+
+    **Error responses:**
+    - `401` — wrong/missing API key.
+    - `503` — the bridge is in its post-429 cooldown after a Monarch lockout;
+      back off ~1 hour, do not retry tightly.
+servers:
+  - url: https://{MONARCH_MCP_URL}
+    description: Monarch.com MCP Bridge URL
+security:
+  - apiKeyAuth: []
+components:
+  schemas: {}
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Liveness probe (no auth required)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+  /accounts:
+    get:
+      operationId: getAccounts
+      summary: List all accounts with balances
+      description: |
+        Returns every Monarch account (checking, savings, investment, credit,
+        loan, real estate, etc.) with current balance and basic type info.
+        **Prefer `verbosity=ultra-light`** unless you specifically need
+        institution details, balance history, or account metadata — the full
+        response can exceed 30 KB while ultra-light is a few hundred bytes.
+      parameters:
+        - in: query
+          name: includeHidden
+          schema:
+            type: boolean
+        - in: query
+          name: verbosity
+          description: Response detail level (ultra-light cuts payload ~99%).
+          schema:
+            type: string
+            enum: [ultra-light, light, standard]
+      responses:
+        '200':
+          description: Accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /accounts/{id}:
+    get:
+      operationId: getAccountById
+      summary: Get one account
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /accounts/{id}/history:
+    get:
+      operationId: getAccountHistory
+      summary: Balance history for one account
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Balance points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /balances:
+    get:
+      operationId: getBalances
+      summary: Balances across all accounts over a date range
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /networth/history:
+    get:
+      operationId: getNetWorthHistory
+      summary: Net worth over time
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Net worth points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /transactions:
+    get:
+      operationId: getTransactions
+      summary: Search transactions with filters
+      description: |
+        Paginated transaction search. Use this for "what did I spend on X",
+        "transactions over $Y", or arbitrary date-range queries. For
+        period-aggregated questions ("how much did I spend in 2024",
+        "category breakdown for Q3") prefer `/cashflow` or
+        `/cashflow/summary` — orders of magnitude smaller payload.
+
+        - Default page size is reasonable; `limit` max is 500.
+        - Pass `search` for free-text matching across merchant + notes.
+        - `absAmountRange="50"` means ≥$50; `",100"` ≤$100; `"50,200"` between.
+        - `isCredit=true` for inflows only, `false` for outflows only.
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: isCredit
+          schema:
+            type: boolean
+        - in: query
+          name: categoryIds
+          description: Comma-separated category ids
+          schema:
+            type: string
+        - in: query
+          name: accountIds
+          description: Comma-separated account ids
+          schema:
+            type: string
+        - in: query
+          name: tagIds
+          description: Comma-separated tag ids
+          schema:
+            type: string
+        - in: query
+          name: merchantIds
+          description: Comma-separated merchant ids
+          schema:
+            type: string
+        - in: query
+          name: absAmountRange
+          description: Absolute amount range as "min,max"; either bound may be empty.
+            Examples - "50" (>=$50), "50,200" ($50-$200), ",100" (<=$100).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /transactions/{id}:
+    get:
+      operationId: getTransactionById
+      summary: Full details of one transaction
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /transactions-summary:
+    get:
+      operationId: getTransactionsSummary
+      summary: Summary stats across all visible transactions
+      description: |
+        Aggregate totals across all non-hidden transactions: transaction count,
+        total income, total expenses, net savings, and savings rate.
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalCount:
+                    type: integer
+                  sumIncome:
+                    type: number
+                  sumExpense:
+                    type: number
+                  savings:
+                    type: number
+                  savingsRate:
+                    type: number
+                additionalProperties: true
+  /merchants:
+    get:
+      operationId: getMerchants
+      summary: List merchants with aggregated spending
+      description: |
+        Returns merchants that have transaction activity, each with id, name,
+        logoUrl, plus aggregated `sumIncome` and `sumExpense` across all
+        non-hidden transactions. Useful for "top merchants by spend" queries.
+      parameters:
+        - in: query
+          name: search
+          description: Case-insensitive substring match against merchant name.
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Merchants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /budgets:
+    get:
+      operationId: getBudgets
+      summary: Monthly budgets with planned vs actual
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: categoryIds
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Budgets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /goals:
+    get:
+      operationId: getGoals
+      summary: Savings and debt-paydown goals
+      responses:
+        '200':
+          description: Goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /bills:
+    get:
+      operationId: getBills
+      summary: Upcoming bills and recurring items
+      description: |
+        Recurring items (bills, subscriptions, paychecks) in a date window,
+        grouped by status. Returns {groups, aggregatedSummary}. Defaults to
+        the current month if dates omitted. includeCompleted=false filters
+        out items already marked paid/received.
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: includeCompleted
+          schema:
+            type: boolean
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Bills
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /cashflow:
+    get:
+      operationId: getCashflow
+      summary: Cashflow by category and category group
+      description: |
+        Aggregated income and spend by category and category group over a
+        date range. **Use this instead of `/transactions` whenever the user
+        is asking about period totals, category breakdowns, or month-over-
+        month trends** — the response is small and pre-aggregated by Monarch.
+        Defaults to the current month if dates omitted.
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Cashflow
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /cashflow/summary:
+    get:
+      operationId: getCashflowSummary
+      summary: Income, expenses, savings, savings rate
+      description: |
+        Just the headline totals — total income, total expenses, net savings,
+        and savings rate — over a date range. The smallest possible payload
+        for "how am I doing this month/year" questions. Defaults to the
+        current month if dates omitted.
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Cashflow summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /recurring:
+    get:
+      operationId: getRecurringStreams
+      summary: All recurring transaction streams
+      parameters:
+        - in: query
+          name: includeLiabilities
+          schema:
+            type: boolean
+        - in: query
+          name: includePending
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Recurring streams
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /recurring/upcoming:
+    get:
+      operationId: getUpcomingRecurring
+      summary: Upcoming recurring transactions in a date window
+      parameters:
+        - in: query
+          name: startDate
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Upcoming items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /categories:
+    get:
+      operationId: getCategories
+      summary: All transaction categories
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /category-groups:
+    get:
+      operationId: getCategoryGroups
+      summary: Category groups
+      responses:
+        '200':
+          description: Category groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /tags:
+    get:
+      operationId: getTags
+      summary: Transaction tags
+      responses:
+        '200':
+          description: Tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /institutions:
+    get:
+      operationId: getInstitutions
+      summary: Connected financial institutions
+      responses:
+        '200':
+          description: Institutions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /institutions/settings:
+    get:
+      operationId: getInstitutionSettings
+      summary: Credential health for each connected institution
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+  /insights:
+    get:
+      operationId: getInsights
+      summary: Financial advice tasks and objectives
+      description: |
+        Returns Monarch's dashboard advice items — actionable financial
+        objectives like "build an emergency fund" or "review subscriptions"
+        with progress (`numTasksCompleted` / `numTasks`). Not date-filterable;
+        any startDate/endDate args are ignored.
+      parameters: []
+      responses:
+        '200':
+          description: Insights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /credit-score:
+    get:
+      operationId: getCreditScore
+      summary: Credit-score tracking subscription metadata
+      description: |
+        Returns Monarch's Spinwheel credit-score tracking metadata
+        (subscription ID, tracking status, onboarding state). The actual
+        score and history are not exposed via this endpoint — full score data
+        requires completing Spinwheel onboarding in the Monarch web app.
+      parameters: []
+      responses:
+        '200':
+          description: Credit score
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true

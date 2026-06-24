@@ -1,9 +1,10 @@
 # monarch-money-remote-mcp
 
-> **Status: stopgap snapshot.** Published as a reference / starting point
-> while we wait for (a) Monarch Money to ship an official API and (b) the
+> **Status: stopgap snapshot.** Use the official [Monarch MCP](https://help.monarch.com/hc/en-us/articles/50207234679956-Monarch-MCP-Connector) now.
+> This was originally published as a reference / starting point
+> while I waited for (a) Monarch Money to ship an official API and (b) the
 > v2 release of the [`monarchmoney`](https://www.npmjs.com/package/monarchmoney)
-> TypeScript SDK. Expect to retire this repo once either lands.
+> TypeScript SDK. The repo is being archived now that an official solution exists.
 
 Single-tenant Cloud Run service that exposes a Monarch Money account to both
 **Claude Custom Connector** (MCP over Streamable HTTP) and **Custom GPT

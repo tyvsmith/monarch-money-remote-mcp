@@ -230,6 +230,9 @@ The original setup still works for existing Claude integrations:
 chatgpt.com → My GPTs → Edit → **Create new action**
 
 1. Regenerate the schema with your URL: `PUBLIC_URL=https://<service>.run.app npm run gen-openapi`.
+   GPT Actions allow 30 operations per action, so the document holds the 17
+   read tools unless `MONARCH_ENABLE_WRITES=1` is set when generating (then
+   split it into two actions).
 2. Paste `openapi.yaml` into the GPT Action schema field (it is JSON; the
    name is kept for existing setups).
 3. Authentication → **API Key**, custom header `X-API-Key`, value is your

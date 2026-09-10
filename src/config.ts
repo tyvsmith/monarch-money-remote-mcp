@@ -23,7 +23,12 @@ const port = Number(process.env.PORT ?? 8080);
 export const config = {
   monarchEmail: required('MONARCH_EMAIL'),
   monarchPassword: required('MONARCH_PASSWORD'),
-  monarchMfaSecret: process.env.MONARCH_MFA_SECRET,
+  monarchMfaSecret: optional('MONARCH_MFA_SECRET'),
+  monarchBaseUrl: (optional('MONARCH_BASE_URL') ?? 'https://api.monarch.com').replace(/\/$/, ''),
+  // Device UUID Monarch already trusts for this login (set by `npm run
+  // monarch:enroll`). A fresh UUID looks like a new device and can trigger an
+  // email OTP or CAPTCHA that a server cannot answer, so keep it stable.
+  monarchDeviceUuid: optional('MONARCH_DEVICE_UUID'),
   wrapperApiKey: required('WRAPPER_API_KEY'),
   port,
   // ----- OAuth 2.1 (better-auth) -----

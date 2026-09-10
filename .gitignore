@@ -36,3 +36,6 @@ Thumbs.db
 
 # tool state
 .omc/
+
+# Monarch session (token + device uuid) written by npm run monarch:enroll
+.monarch-session.json

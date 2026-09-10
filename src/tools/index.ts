@@ -21,6 +21,9 @@ import { CreateTag, UpdateTag, DeleteTag } from './write/tags.ts';
 import { CreateCategory, UpdateCategory, DeleteCategory } from './write/categories.ts';
 import { CreateMerchant, UpdateMerchant, MergeMerchants } from './write/merchants.ts';
 import { CreateRule, DeleteRule } from './write/rules.ts';
+import { CreateTransaction, UpdateTransaction, DeleteTransaction } from './write/transactions.ts';
+import { BulkUpdateTransactions, BulkRecategorizeTransactions } from './write/bulk.ts';
+import { UpdateTransactionSplits } from './write/splits.ts';
 
 // Official order.
 const readTools = [
@@ -54,6 +57,12 @@ const writeTools = [
   MergeMerchants,
   CreateRule,
   DeleteRule,
+  CreateTransaction,
+  UpdateTransaction,
+  DeleteTransaction,
+  BulkUpdateTransactions,
+  BulkRecategorizeTransactions,
+  UpdateTransactionSplits,
 ] as unknown as ToolDef[];
 
 export const writesEnabled = process.env.MONARCH_ENABLE_WRITES === '1';

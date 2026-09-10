@@ -5,6 +5,12 @@ import { GetAccounts } from './read/accounts.ts';
 import { GetTransactions } from './read/transactions.ts';
 import { GetCashFlow } from './read/cashflow.ts';
 import { GetSpendingByCategory } from './read/spending.ts';
+import { GetBudget } from './read/budget.ts';
+import { GetGoals } from './read/goals.ts';
+import { GetInvestments } from './read/investments.ts';
+import { GetNetWorthHistory } from './read/net-worth.ts';
+import { GetRealEstate } from './read/real-estate.ts';
+import { GetRecurring } from './read/recurring.ts';
 import { GetCategories } from './read/categories.ts';
 import { GetHouseholdMembers, GetBusinesses } from './read/household.ts';
 import { GetMerchants } from './read/merchants.ts';
@@ -12,13 +18,20 @@ import { ListRules } from './read/rules.ts';
 import { GetCreditScoreHistory } from './read/credit.ts';
 import { GetTags } from './read/tags.ts';
 
+// Official order.
 const readTools = [
   GetAccounts,
   GetTransactions,
+  GetBudget,
   GetCashFlow,
   GetCategories,
-  GetSpendingByCategory,
+  GetGoals,
+  GetInvestments,
   GetMerchants,
+  GetNetWorthHistory,
+  GetRealEstate,
+  GetRecurring,
+  GetSpendingByCategory,
   GetTags,
   GetCreditScoreHistory,
   GetHouseholdMembers,

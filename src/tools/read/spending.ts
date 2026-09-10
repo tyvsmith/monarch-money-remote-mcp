@@ -43,6 +43,7 @@ merchants in each), and the single largest expense in the period.`,
       const merchantQueries = top.map((k) =>
         c.query<AggregatesData>(aggregatesQuery(['merchant']), { filters: { ...base, categories: [k.category_id] }, groupBy: ['merchant'] }),
       );
+      // TransactionOrdering.amount sorts ascending (most negative first), verified live 2026-09-10; inverse_amount starts at 0.
       const largestQuery = c.query<TransactionsData>(GET_TRANSACTIONS_Q, { filters: { ...base, debitsOnly: true }, limit: 1, offset: 0, orderBy: 'amount' });
       const [perCategory, lg] = await Promise.all([Promise.all(merchantQueries), largestQuery]);
       top.forEach((k, i) => {

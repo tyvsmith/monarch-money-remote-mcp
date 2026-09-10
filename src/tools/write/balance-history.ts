@@ -40,7 +40,7 @@ throwaway manual account before trusting it.`,
     if (!acct.isManual) throw new ToolInputError(`account ${acct.displayName} syncs from an institution; only manual accounts can be written`);
     const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
     const history = (await c.query<AccountSnapshotsData>(ACCOUNT_SNAPSHOTS_Q, { accountId: account_id })).snapshotsForAccount;
-    const existing = history.filter((s) => s.date >= sorted[0]!.date && s.date <= sorted.at(-1)!.date).map((s) => ({ date: s.date, balance: s.signedBalance }));
+    const existing = history.map((s) => ({ date: s.date, balance: s.signedBalance }));
     const preview = previewBalanceUpload(existing, sorted, acct.currentBalance ?? 0, new Date().toISOString().slice(0, 10));
     if (dry_run) return { dry_run: true, account_id, account: acct.displayName, ...preview };
 

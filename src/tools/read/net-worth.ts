@@ -3,7 +3,7 @@ import { defineTool, isoDate } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import { NET_WORTH_Q, ACCOUNT_SNAPSHOTS_Q, type NetWorthData, type AccountSnapshotsData } from '../../monarch/ops/snapshots.ts';
 import { thinToWeekly } from '../lib/net-worth.ts';
-import { accountScopeInput, accountTypeFilters, fetchAccounts } from './accounts.ts';
+import { accountScopeInput, accountTypeFilters, fetchAccounts, scopeIsNarrowed } from './accounts.ts';
 
 export const GetNetWorthHistory = defineTool({
   name: 'GetNetWorthHistory',
@@ -28,7 +28,7 @@ For ranges over 60 days the readings are weekly; otherwise daily.`,
     const c = await getMonarch();
     const end = a.end_date ?? new Date().toISOString().slice(0, 10);
     const af = await accountTypeFilters(c, a);
-    const narrowed = !!(a.accounts?.length || a.businesses?.length || (a.ownership && a.ownership !== '{}'));
+    const narrowed = scopeIsNarrowed(a);
     const accounts = narrowed || a.include_account_breakdown ? await fetchAccounts(c, a) : [];
     if (narrowed) af.ids = accounts.map((x) => x.id);
     const d = await c.query<NetWorthData>(NET_WORTH_Q, {

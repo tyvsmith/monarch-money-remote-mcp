@@ -109,8 +109,12 @@ export async function saveSession(s: SavedSession): Promise<void> {
   if (!s.token) return;
   const payload = JSON.stringify({ token: s.token, deviceUuid: s.deviceUuid });
   if (!isAvailable()) {
-    await writeFile(LOCAL_FILE, payload + '\n', { mode: 0o600 });
-    console.log(`[session-store] saved session to ${LOCAL_FILE}`);
+    try {
+      await writeFile(LOCAL_FILE, payload + '\n', { mode: 0o600 });
+      console.log(`[session-store] saved session to ${LOCAL_FILE}`);
+    } catch (err) {
+      console.warn(`[session-store] could not write ${LOCAL_FILE}; session lives in memory only:`, err);
+    }
     return;
   }
   const parent = secretParent();

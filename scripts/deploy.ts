@@ -645,7 +645,7 @@ function deploy(): void {
   ]);
   const explicitIssuer = (existingUrl.stdout ?? '').trim();
 
-  const envVars: string[] = [`GCP_PROJECT_ID=${PROJECT_ID}`];
+  const envVars: string[] = [`GCP_PROJECT_ID=${PROJECT_ID}`, `MONARCH_ENABLE_WRITES=${lookup('MONARCH_ENABLE_WRITES') === '1' ? '1' : '0'}`];
   if (explicitIssuer) envVars.push(`ISSUER_URL=${explicitIssuer}`);
 
   // OAuth client credentials are NOT mounted as env vars anymore — the

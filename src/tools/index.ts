@@ -28,8 +28,8 @@ import { CreateGoal, UpdateGoal, DeleteGoal, ContributeToGoal, WithdrawFromGoal 
 import { UpdateAccountBalanceHistory } from './write/balance-history.ts';
 import { ReportIssue } from './write/report-issue.ts';
 
-// Official order.
-const readTools = [
+// Official order. Read/write exposure comes from each tool's readOnly flag.
+const ordered = [
   GetAccounts,
   GetTransactions,
   GetBudget,
@@ -47,8 +47,6 @@ const readTools = [
   GetHouseholdMembers,
   GetBusinesses,
   ListRules,
-] as unknown as ToolDef[];
-const writeTools = [
   CreateTag,
   UpdateTag,
   DeleteTag,
@@ -76,8 +74,8 @@ const writeTools = [
 ] as unknown as ToolDef[];
 
 export const writesEnabled = process.env.MONARCH_ENABLE_WRITES === '1';
-export const allTools: ToolDef[] = [...readTools, ...writeTools];
-export const tools: ToolDef[] = writesEnabled ? allTools : readTools;
+export const allTools: ToolDef[] = ordered;
+export const tools: ToolDef[] = writesEnabled ? ordered : ordered.filter((t) => t.readOnly);
 
 export function findTool(name: string): ToolDef | undefined {
   return tools.find((t) => t.name === name);

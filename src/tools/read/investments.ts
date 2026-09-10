@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { defineTool, isoDate, nullableList } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import { HOLDINGS_Q, type HoldingsData } from '../../monarch/ops/investments.ts';
-import { fetchAccounts } from './accounts.ts';
+import { fetchAccounts, scopeIsNarrowed } from './accounts.ts';
 
 export const GetInvestments = defineTool({
   name: 'GetInvestments',
@@ -23,7 +23,7 @@ holding.`,
   handler: async ({ start_date, end_date, accounts, ownership }) => {
     const c = await getMonarch();
     const input: Record<string, unknown> = { startDate: start_date, endDate: end_date };
-    if (accounts?.length || (ownership && ownership !== '{}')) {
+    if (scopeIsNarrowed({ accounts, ownership })) {
       input.accountIds = (await fetchAccounts(c, { accounts, ownership, account_types: ['Investments'] })).map((a) => a.id);
     }
     const { portfolio } = await c.query<HoldingsData>(HOLDINGS_Q, { input });

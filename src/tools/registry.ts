@@ -25,6 +25,28 @@ export function defineTool<S extends z.ZodRawShape>(def: ToolDef<S>): ToolDef<S>
   return def;
 }
 
+export interface ToolFailure {
+  error: string;
+  code: string | null;
+  status: number;
+}
+
+/** Validate, run, and normalize errors once for every transport (MCP, REST). */
+export async function invokeTool(def: ToolDef, rawArgs: unknown): Promise<{ ok: true; data: unknown } | { ok: false; failure: ToolFailure }> {
+  const parsed = z.object(def.input).safeParse(rawArgs ?? {});
+  if (!parsed.success) {
+    return { ok: false, failure: { error: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; '), code: 'INVALID_INPUT', status: 400 } };
+  }
+  try {
+    return { ok: true, data: await def.handler(parsed.data as never) };
+  } catch (err) {
+    const e = err as Error & { statusCode?: number; code?: string };
+    const status = typeof e.statusCode === 'number' ? e.statusCode : 500;
+    if (status >= 500) console.error(`[tool ${def.name}]`, err);
+    return { ok: false, failure: { error: e.message ?? String(err), code: e.code ?? null, status } };
+  }
+}
+
 /** Official tools pass structured filters as JSON strings. Parse and validate here. */
 export function jsonArg<T>(raw: string | null | undefined, schema: z.ZodType<T>, name: string): T {
   const text = (raw ?? '').trim();

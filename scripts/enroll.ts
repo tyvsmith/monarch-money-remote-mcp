@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { createClient, MonarchError } from '../src/monarch/client.ts';
+import { createClient, DEFAULT_BASE_URL, MonarchError } from '../src/monarch/client.ts';
 import { login } from '../src/monarch/login.ts';
 import { saveSession, type SavedSession } from '../src/session-store.ts';
 
@@ -23,7 +23,7 @@ const flag = (name: string): string | undefined => {
 };
 
 const env = process.env;
-const baseUrl = (env.MONARCH_BASE_URL ?? 'https://api.monarch.com').replace(/\/$/, '');
+const baseUrl = (env.MONARCH_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, '');
 const rl = createInterface({ input: stdin, output: stdout });
 const ask = (q: string) => rl.question(q).then((s) => s.trim());
 

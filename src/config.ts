@@ -1,3 +1,5 @@
+import { DEFAULT_BASE_URL } from './monarch/client.ts';
+
 function required(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`Missing required env var ${name}`);
@@ -31,7 +33,7 @@ export const config = {
     return required('MONARCH_PASSWORD');
   },
   monarchMfaSecret: optional('MONARCH_MFA_SECRET'),
-  monarchBaseUrl: (optional('MONARCH_BASE_URL') ?? 'https://api.monarch.com').replace(/\/$/, ''),
+  monarchBaseUrl: (optional('MONARCH_BASE_URL') ?? DEFAULT_BASE_URL).replace(/\/$/, ''),
   // Device UUID Monarch already trusts for this login (set by `npm run
   // monarch:enroll`). A fresh UUID looks like a new device and can trigger an
   // email OTP or CAPTCHA that a server cannot answer, so keep it stable.

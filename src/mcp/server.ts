@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { tools, writesEnabled } from '../tools/index.ts';
-import { MonarchError } from '../monarch/client.ts';
+import { invokeTool } from '../tools/registry.ts';
 
 const SERVER_INSTRUCTIONS = `Monarch Money MCP (third-party stand-in for the official Monarch connector while it is paused).
 
@@ -39,17 +39,9 @@ function buildServer(): McpServer {
         },
       },
       async (args) => {
-        try {
-          const data = await t.handler(args as never);
-          return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 1) }] };
-        } catch (err) {
-          const e = err as Error & { statusCode?: number; code?: string };
-          const message = err instanceof MonarchError ? err.message : (e.message ?? String(err));
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: JSON.stringify({ error: message, code: e.code ?? null, status: e.statusCode ?? 500 }) }],
-          };
-        }
+        const r = await invokeTool(t, args);
+        if (r.ok) return { content: [{ type: 'text' as const, text: JSON.stringify(r.data, null, 1) }] };
+        return { isError: true, content: [{ type: 'text' as const, text: JSON.stringify(r.failure) }] };
       },
     );
   }

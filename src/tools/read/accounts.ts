@@ -10,7 +10,7 @@ import {
   type AccountTypesData,
 } from '../../monarch/ops/accounts.ts';
 import { resolveAccountTypeNames, resolveAccountSubtypeNames } from '../lib/account-types.ts';
-import { resolveOwnershipSet } from '../lib/ownership.ts';
+import { parseOwnership, resolveOwnershipSet } from '../lib/ownership.ts';
 
 export const accountScopeInput = {
   accounts: nullableList.describe('filter to specific account names.'),
@@ -42,6 +42,11 @@ export interface AccountScope {
   businesses?: string[] | null;
   include_unassigned_businesses?: boolean;
   ownership?: string;
+}
+
+/** True when the scope selects a subset of accounts by name, business, or owner (type filters aside). */
+export function scopeIsNarrowed(scope: AccountScope): boolean {
+  return !!(scope.accounts?.length || scope.businesses?.length || parseOwnership(scope.ownership).scope === 'user');
 }
 
 /** Resolve official display-name type filters to Monarch's internal names. Shared with GetNetWorthHistory. */

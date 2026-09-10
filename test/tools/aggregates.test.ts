@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { postAggregate, timeKey } from '../../src/tools/lib/aggregates.ts';
+import { postAggregate } from '../../src/tools/lib/aggregates.ts';
 import type { AggregateRow } from '../../src/monarch/ops/cashflow.ts';
 
 const summary = (sum: number, count: number) => ({ sum, sumExpense: sum, sumIncome: 0, savings: 0, savingsRate: 0, count, avg: null, avgExpense: null, avgIncome: null, largest: 0, first: null, last: null });
@@ -24,9 +24,4 @@ test('sum per month, and min with limit picks the most negative bucket', () => {
 
 test('count with no dimensions counts all buckets', () => {
   assert.deepEqual(postAggregate(rows, { group_by: [], operation: 'count' }).map((r) => r.value), [3]);
-});
-
-test('timeKey extracts the present time dimension', () => {
-  assert.equal(timeKey({ month: '2026-01-01' }), 'month');
-  assert.equal(timeKey({ category: {} }), null);
 });

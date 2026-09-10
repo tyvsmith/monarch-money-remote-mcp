@@ -35,13 +35,6 @@ export const ENTITY_TO_GRAPHQL: Record<string, string> = {
   needs_review_by_user: 'needsReviewByUser',
   business_entity: 'businessEntity',
 };
-const TIME_KEYS = ['day', 'week', 'month', 'quarter', 'year'];
-
-export function timeKey(groupBy: Record<string, unknown> | undefined): string | null {
-  for (const k of TIME_KEYS) if (groupBy && groupBy[k] != null) return k;
-  return null;
-}
-
 export interface PostAggRow {
   group: Record<string, unknown>;
   value: number;

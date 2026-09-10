@@ -17,6 +17,10 @@ import { GetMerchants } from './read/merchants.ts';
 import { ListRules } from './read/rules.ts';
 import { GetCreditScoreHistory } from './read/credit.ts';
 import { GetTags } from './read/tags.ts';
+import { CreateTag, UpdateTag, DeleteTag } from './write/tags.ts';
+import { CreateCategory, UpdateCategory, DeleteCategory } from './write/categories.ts';
+import { CreateMerchant, UpdateMerchant, MergeMerchants } from './write/merchants.ts';
+import { CreateRule, DeleteRule } from './write/rules.ts';
 
 // Official order.
 const readTools = [
@@ -38,7 +42,19 @@ const readTools = [
   GetBusinesses,
   ListRules,
 ] as unknown as ToolDef[];
-const writeTools: ToolDef[] = [];
+const writeTools = [
+  CreateTag,
+  UpdateTag,
+  DeleteTag,
+  CreateCategory,
+  UpdateCategory,
+  DeleteCategory,
+  CreateMerchant,
+  UpdateMerchant,
+  MergeMerchants,
+  CreateRule,
+  DeleteRule,
+] as unknown as ToolDef[];
 
 export const writesEnabled = process.env.MONARCH_ENABLE_WRITES === '1';
 export const allTools: ToolDef[] = [...readTools, ...writeTools];

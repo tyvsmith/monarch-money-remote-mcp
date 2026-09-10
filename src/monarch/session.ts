@@ -61,6 +61,11 @@ async function build(): Promise<MonarchClient> {
   return makeClient();
 }
 
+/** Test seam: inject a fake client so tool handlers can be unit-tested offline. */
+export function setMonarchClientForTests(c: MonarchClient | null): void {
+  client = c;
+}
+
 export async function getMonarch(): Promise<MonarchClient> {
   if (client) return client;
   if (Date.now() < cooldownUntil) {

@@ -2,6 +2,9 @@
 // when MONARCH_ENABLE_WRITES=1 so a deploy defaults to read-only.
 import type { ToolDef } from './registry.ts';
 import { GetAccounts } from './read/accounts.ts';
+import { GetTransactions } from './read/transactions.ts';
+import { GetCashFlow } from './read/cashflow.ts';
+import { GetSpendingByCategory } from './read/spending.ts';
 import { GetCategories } from './read/categories.ts';
 import { GetHouseholdMembers, GetBusinesses } from './read/household.ts';
 import { GetMerchants } from './read/merchants.ts';
@@ -11,7 +14,10 @@ import { GetTags } from './read/tags.ts';
 
 const readTools = [
   GetAccounts,
+  GetTransactions,
+  GetCashFlow,
   GetCategories,
+  GetSpendingByCategory,
   GetMerchants,
   GetTags,
   GetCreditScoreHistory,

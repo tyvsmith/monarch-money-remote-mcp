@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { businessEntitySet, defineTool, nullableList } from '../registry.ts';
+import { businessEntitySet, defineTool, nullableList, ToolInputError } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import type { MonarchClient } from '../../monarch/client.ts';
 import {
@@ -54,8 +54,16 @@ export async function accountTypeFilters(c: MonarchClient, scope: Pick<AccountSc
   const out: Record<string, unknown> = {};
   if (!scope.account_types?.length && !scope.account_sub_types?.length) return out;
   const { accountTypes } = await c.query<AccountTypesData>(ACCOUNT_TYPES_Q);
-  if (scope.account_types?.length) out.accountTypes = resolveAccountTypeNames(scope.account_types, accountTypes);
-  if (scope.account_sub_types?.length) out.accountSubtypes = resolveAccountSubtypeNames(scope.account_sub_types, accountTypes);
+  if (scope.account_types?.length) {
+    out.accountTypes = resolveAccountTypeNames(scope.account_types, accountTypes);
+    if (!(out.accountTypes as string[]).length) {
+      throw new ToolInputError(`account_types not recognized: ${scope.account_types.join(', ')}. Known: ${accountTypes.map((t) => t.display).join(', ')}`);
+    }
+  }
+  if (scope.account_sub_types?.length) {
+    out.accountSubtypes = resolveAccountSubtypeNames(scope.account_sub_types, accountTypes);
+    if (!(out.accountSubtypes as string[]).length) throw new ToolInputError(`account_sub_types not recognized: ${scope.account_sub_types.join(', ')}`);
+  }
   return out;
 }
 
@@ -70,6 +78,7 @@ export async function fetchAccounts(c: MonarchClient, scope: AccountScope, inclu
   if (scope.accounts?.length) {
     const names = new Set(scope.accounts.map((s) => s.toLowerCase()));
     accounts = accounts.filter((a) => names.has(a.displayName.toLowerCase()));
+    if (!accounts.length) throw new ToolInputError(`accounts not found: ${scope.accounts.join(', ')} (use GetAccounts for exact names)`);
   }
   return accounts;
 }

@@ -31,3 +31,10 @@ test('merchant and account names resolve through the context', async () => {
   assert.equal(f.absAmountGte, 50);
   assert.equal(f.transactionVisibility, 'all_transactions');
 });
+
+test('names that resolve to nothing are errors, not silent widening', async () => {
+  const empty = { categories: ctx.categories, resolveMerchantIds: async () => [], resolveAccountIds: async () => [] };
+  await assert.rejects(buildTransactionFilter({ filters: { merchants: ['Costcoo'] } }, empty), /merchants not found/);
+  await assert.rejects(buildTransactionFilter({ filters: { accounts: ['Bogus'] } }, empty), /accounts not found/);
+  await assert.rejects(buildTransactionFilter({ filters: { categories: ['Nonexistent'] } }, empty), /categories not found/);
+});

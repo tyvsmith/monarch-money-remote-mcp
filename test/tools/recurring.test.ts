@@ -28,3 +28,10 @@ test('monthlyAmount handles common frequencies', () => {
   assert.equal(monthlyAmount(-6, 'semimonthly'), 12);
   assert.equal(monthlyAmount(-7, 'unknown'), 7);
 });
+
+test('inbound transfers are transfers, not income', () => {
+  const b = bucketRecurring([item({ amount: 1000, type: 'transfer' })]);
+  assert.equal(b.transfers.length, 1);
+  assert.equal(b.income.length, 0);
+  assert.equal(b.totals.monthly_income, 0);
+});

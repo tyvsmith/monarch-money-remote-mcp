@@ -156,6 +156,9 @@ function putSecret(name: string, value: string): void {
       ['secrets', 'create', name, `--project=${PROJECT_ID}`, '--data-file=-'],
       { stdin: value },
     );
+    // A secret created after bootstrap (e.g. monarch-device-uuid on an
+    // upgraded deployment) still needs the runtime SA to read it.
+    bindSecretRole(name, 'roles/secretmanager.secretAccessor');
   }
 }
 

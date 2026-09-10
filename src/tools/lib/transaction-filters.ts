@@ -2,7 +2,7 @@
 // TransactionFilterInput. Names (categories, merchants, accounts) resolve to
 // ids through the context so the mapper stays pure and testable.
 import { z } from 'zod';
-import { businessEntitySet } from '../registry.ts';
+import { businessEntitySet, ToolInputError } from '../registry.ts';
 
 export const txnFilterSchema = z.object({
   transaction_type: z.enum(['Credit', 'Debit', 'All']).optional(),
@@ -65,6 +65,7 @@ export async function buildTransactionFilter(
 
   const catIds = [...(f.category_ids ?? [])];
   const groupIds = new Set<string>();
+  const unknownCategories: string[] = [];
   for (const name of f.categories ?? []) {
     const n = name.toLowerCase();
     const cats = ctx.categories.filter((c) => c.name.toLowerCase() === n);
@@ -72,14 +73,27 @@ export async function buildTransactionFilter(
       catIds.push(...cats.map((c) => c.id));
       continue;
     }
-    for (const c of ctx.categories) if (c.groupName.toLowerCase() === n) groupIds.add(c.groupId);
+    const groups = ctx.categories.filter((c) => c.groupName.toLowerCase() === n).map((c) => c.groupId);
+    if (groups.length) groups.forEach((g) => groupIds.add(g));
+    else unknownCategories.push(name);
   }
+  if (unknownCategories.length) throw new ToolInputError(`categories not found: ${unknownCategories.join(', ')} (use GetCategories for exact names or pass category_ids)`);
   if (catIds.length) out.categories = catIds;
   if (groupIds.size) out.categoryGroups = [...groupIds];
 
-  const merchants = [...(f.merchant_ids ?? []), ...(f.merchants?.length ? await ctx.resolveMerchantIds(f.merchants) : [])];
+  const merchants = [...(f.merchant_ids ?? [])];
+  if (f.merchants?.length) {
+    const found = await ctx.resolveMerchantIds(f.merchants);
+    if (!found.length) throw new ToolInputError(`merchants not found: ${f.merchants.join(', ')} (use GetMerchants(search=...) or pass merchant_ids)`);
+    merchants.push(...found);
+  }
   if (merchants.length) out.merchants = merchants;
-  const accounts = [...(f.account_ids ?? []), ...(f.accounts?.length ? await ctx.resolveAccountIds(f.accounts) : [])];
+  const accounts = [...(f.account_ids ?? [])];
+  if (f.accounts?.length) {
+    const found = await ctx.resolveAccountIds(f.accounts);
+    if (!found.length) throw new ToolInputError(`accounts not found: ${f.accounts.join(', ')} (use GetAccounts for exact names or pass account_ids)`);
+    accounts.push(...found);
+  }
   if (accounts.length) out.accounts = accounts;
   if (f.tag_ids?.length) out.tags = f.tag_ids;
   const biz = businessEntitySet(f.business_entity_ids, f.include_unassigned_business_entities);

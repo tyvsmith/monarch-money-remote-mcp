@@ -40,8 +40,10 @@ export async function invokeTool(def: ToolDef, rawArgs: unknown): Promise<{ ok: 
   try {
     return { ok: true, data: await def.handler(parsed.data as never) };
   } catch (err) {
-    const e = err as Error & { statusCode?: number; code?: string };
-    const status = typeof e.statusCode === 'number' ? e.statusCode : 500;
+    const e = err as Error & { statusCode?: number; code?: string; name?: string };
+    let status = typeof e.statusCode === 'number' ? e.statusCode : 500;
+    // Upstream auth/throttle failures must not read as this service's own auth: surface them as gateway errors.
+    if (e.name === 'MonarchError' && [401, 403, 429].includes(status)) status = 503;
     if (status >= 500) console.error(`[tool ${def.name}]`, err);
     return { ok: false, failure: { error: e.message ?? String(err), code: e.code ?? null, status } };
   }

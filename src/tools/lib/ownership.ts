@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { jsonArg } from '../registry.ts';
+import { jsonArg, ToolInputError } from '../registry.ts';
+import type { MonarchClient } from '../../monarch/client.ts';
+import { GET_HOUSEHOLD_Q, type HouseholdData } from '../../monarch/ops/household.ts';
 
 const ownershipSchema = z.object({
   scope: z.enum(['household', 'user']).optional(),
@@ -30,6 +32,14 @@ export function ownershipToSet(o: OwnershipArg, members: Member[], selfId: strin
       : members.find(
           (m) => m.displayName.toLowerCase() === who || m.name.toLowerCase() === who || m.name.toLowerCase().startsWith(who),
         )?.id;
-  if (!id) throw new Error(`ownership.user "${o.user}" is not a household member`);
+  if (!id) throw new ToolInputError(`ownership.user "${o.user}" is not a household member`);
   return { userIds: [id], includeJointlyOwned: o.jointly_owned_setting ?? true };
+}
+
+/** Parse the official ownership JSON and, only when it scopes to a user, resolve it against the household. */
+export async function resolveOwnershipSet(c: MonarchClient, raw: string | null | undefined): Promise<OwnershipSetInput | undefined> {
+  const own = parseOwnership(raw);
+  if (own.scope !== 'user') return undefined;
+  const h = await c.query<HouseholdData>(GET_HOUSEHOLD_Q);
+  return ownershipToSet(own, h.myHousehold.users, h.me.id);
 }

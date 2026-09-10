@@ -2,10 +2,8 @@ import { z } from 'zod';
 import { defineTool, isoDate } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import { NET_WORTH_Q, ACCOUNT_SNAPSHOTS_Q, type NetWorthData, type AccountSnapshotsData } from '../../monarch/ops/snapshots.ts';
-import { ACCOUNT_TYPES_Q, type AccountTypesData } from '../../monarch/ops/accounts.ts';
-import { resolveAccountTypeNames, resolveAccountSubtypeNames } from '../lib/account-types.ts';
 import { thinToWeekly } from '../lib/net-worth.ts';
-import { accountScopeInput, fetchAccounts } from './accounts.ts';
+import { accountScopeInput, accountTypeFilters, fetchAccounts } from './accounts.ts';
 
 export const GetNetWorthHistory = defineTool({
   name: 'GetNetWorthHistory',
@@ -29,12 +27,7 @@ For ranges over 60 days the readings are weekly; otherwise daily.`,
   handler: async (a) => {
     const c = await getMonarch();
     const end = a.end_date ?? new Date().toISOString().slice(0, 10);
-    const af: Record<string, unknown> = {};
-    if (a.account_types?.length || a.account_sub_types?.length) {
-      const { accountTypes } = await c.query<AccountTypesData>(ACCOUNT_TYPES_Q);
-      if (a.account_types?.length) af.accountTypes = resolveAccountTypeNames(a.account_types, accountTypes);
-      if (a.account_sub_types?.length) af.accountSubtypes = resolveAccountSubtypeNames(a.account_sub_types, accountTypes);
-    }
+    const af = await accountTypeFilters(c, a);
     const narrowed = !!(a.accounts?.length || a.businesses?.length || (a.ownership && a.ownership !== '{}'));
     const accounts = narrowed || a.include_account_breakdown ? await fetchAccounts(c, a) : [];
     if (narrowed) af.ids = accounts.map((x) => x.id);

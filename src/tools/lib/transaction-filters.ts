@@ -2,6 +2,7 @@
 // TransactionFilterInput. Names (categories, merchants, accounts) resolve to
 // ids through the context so the mapper stays pure and testable.
 import { z } from 'zod';
+import { businessEntitySet } from '../registry.ts';
 
 export const txnFilterSchema = z.object({
   transaction_type: z.enum(['Credit', 'Debit', 'All']).optional(),
@@ -81,12 +82,8 @@ export async function buildTransactionFilter(
   const accounts = [...(f.account_ids ?? []), ...(f.accounts?.length ? await ctx.resolveAccountIds(f.accounts) : [])];
   if (accounts.length) out.accounts = accounts;
   if (f.tag_ids?.length) out.tags = f.tag_ids;
-  if (f.business_entity_ids?.length || f.include_unassigned_business_entities) {
-    out.businessEntitySet = {
-      businessEntityIds: f.business_entity_ids ?? [],
-      includeUnassigned: f.include_unassigned_business_entities ?? false,
-    };
-  }
+  const biz = businessEntitySet(f.business_entity_ids, f.include_unassigned_business_entities);
+  if (biz) out.businessEntitySet = biz;
   for (const [src, dst] of DIRECT) if (f[src] !== undefined) out[dst] = f[src];
   return out;
 }

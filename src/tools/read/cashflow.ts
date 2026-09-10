@@ -1,11 +1,10 @@
 import { z } from 'zod';
-import { defineTool, isoDate, jsonArg } from '../registry.ts';
+import { businessEntitySet, defineTool, isoDate, jsonArg } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import type { MonarchClient } from '../../monarch/client.ts';
 import { aggregatesQuery, type AggregatesData, type GroupByKey } from '../../monarch/ops/cashflow.ts';
 import { baseQuerySchema, cashFlowFilterSchema, postAggSchema, postAggregate, ENTITY_TO_GRAPHQL } from '../lib/aggregates.ts';
-import { GET_HOUSEHOLD_Q, type HouseholdData } from '../../monarch/ops/household.ts';
-import { parseOwnership, ownershipToSet } from '../lib/ownership.ts';
+import { resolveOwnershipSet } from '../lib/ownership.ts';
 
 export async function cashFlowGraphqlFilter(
   c: MonarchClient,
@@ -22,16 +21,10 @@ export async function cashFlowGraphqlFilter(
   if (f.is_untagged !== undefined) out.isUntagged = f.is_untagged;
   if (f.category_type) out.categoryType = f.category_type;
   if (f.search) out.search = f.search;
-  if (f.business_entities?.length || f.include_unassigned_business_entities) {
-    out.businessEntitySet = { businessEntityIds: f.business_entities ?? [], includeUnassigned: f.include_unassigned_business_entities ?? false };
-  }
-  if (f.ownership_setting) {
-    const own = parseOwnership(f.ownership_setting);
-    if (own.scope === 'user') {
-      const h = await c.query<HouseholdData>(GET_HOUSEHOLD_Q);
-      out.ownershipSet = ownershipToSet(own, h.myHousehold.users, h.me.id);
-    }
-  }
+  const biz = businessEntitySet(f.business_entities, f.include_unassigned_business_entities);
+  if (biz) out.businessEntitySet = biz;
+  const own = await resolveOwnershipSet(c, f.ownership_setting);
+  if (own) out.ownershipSet = own;
   return out;
 }
 

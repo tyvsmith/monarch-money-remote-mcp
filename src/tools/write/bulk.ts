@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineTool, isoDate, jsonArg, ToolInputError } from '../registry.ts';
+import { defineTool, dryRun, isoDate, jsonArg, ToolInputError } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import type { MonarchClient } from '../../monarch/client.ts';
 import {
@@ -67,11 +67,7 @@ export const BulkUpdateTransactions = defineTool({
     updates: z
       .string()
       .describe('JSON object with any subset of: category_id, notes, hide_from_reports, review_status, is_recurring, needs_review_by_user_id, owner_user_id, owner_is_joint, business_entity_id, tag_ids (list of strings), merchant_id or merchant_name. Cross-entity references are IDs from the read tools.'),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe('if true, returns a preview ({would_affect_count, sample_transaction_ids, resolved_updates}) without writing. Call once with dry_run=true to show the user what will change, then call again with dry_run=false to commit.'),
+    dry_run: dryRun('{would_affect_count, sample_transaction_ids, resolved_updates}'),
   },
   handler: async ({ transaction_ids, updates, dry_run }) => {
     const c = await getMonarch();
@@ -104,11 +100,7 @@ export const BulkRecategorizeTransactions = defineTool({
       .nullable()
       .optional()
       .describe('JSON object selecting the transactions to move; mutually exclusive with transaction_ids. Supported keys: start_date and end_date (ISO YYYY-MM-DD, both required when filtering), merchant_id, category_id (the *current* category to move out of), account_id. All IDs come from the read tools.'),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe('if true, returns a preview ({would_affect_count, requested_count, sample_transaction_ids, target_category_id}) without writing. Call once with dry_run=true to show the user what will change, then again with dry_run=false to commit.'),
+    dry_run: dryRun('{would_affect_count, requested_count, sample_transaction_ids, target_category_id}'),
   },
   handler: async ({ category_id, transaction_ids, filters, dry_run }) => {
     const hasIds = !!transaction_ids?.length;

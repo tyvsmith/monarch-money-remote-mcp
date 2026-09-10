@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineTool, nullableList } from '../registry.ts';
+import { businessEntitySet, defineTool, nullableList } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import type { MonarchClient } from '../../monarch/client.ts';
 import {
@@ -9,9 +9,8 @@ import {
   type AccountsData,
   type AccountTypesData,
 } from '../../monarch/ops/accounts.ts';
-import { GET_HOUSEHOLD_Q, type HouseholdData } from '../../monarch/ops/household.ts';
 import { resolveAccountTypeNames, resolveAccountSubtypeNames } from '../lib/account-types.ts';
-import { parseOwnership, ownershipToSet } from '../lib/ownership.ts';
+import { resolveOwnershipSet } from '../lib/ownership.ts';
 
 export const accountScopeInput = {
   accounts: nullableList.describe('filter to specific account names.'),
@@ -45,27 +44,23 @@ export interface AccountScope {
   ownership?: string;
 }
 
+/** Resolve official display-name type filters to Monarch's internal names. Shared with GetNetWorthHistory. */
+export async function accountTypeFilters(c: MonarchClient, scope: Pick<AccountScope, 'account_types' | 'account_sub_types'>): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  if (!scope.account_types?.length && !scope.account_sub_types?.length) return out;
+  const { accountTypes } = await c.query<AccountTypesData>(ACCOUNT_TYPES_Q);
+  if (scope.account_types?.length) out.accountTypes = resolveAccountTypeNames(scope.account_types, accountTypes);
+  if (scope.account_sub_types?.length) out.accountSubtypes = resolveAccountSubtypeNames(scope.account_sub_types, accountTypes);
+  return out;
+}
+
 /** Shared by GetAccounts, GetNetWorthHistory, GetInvestments, GetRealEstate. */
 export async function fetchAccounts(c: MonarchClient, scope: AccountScope, includeHidden = true): Promise<Account[]> {
-  const filters: Record<string, unknown> = { includeHidden };
-  if (scope.account_types?.length || scope.account_sub_types?.length) {
-    const { accountTypes } = await c.query<AccountTypesData>(ACCOUNT_TYPES_Q);
-    if (scope.account_types?.length) filters.accountTypes = resolveAccountTypeNames(scope.account_types, accountTypes);
-    if (scope.account_sub_types?.length) {
-      filters.accountSubtypes = resolveAccountSubtypeNames(scope.account_sub_types, accountTypes);
-    }
-  }
-  if (scope.businesses?.length) {
-    filters.businessEntitySet = {
-      businessEntityIds: scope.businesses,
-      includeUnassigned: scope.include_unassigned_businesses ?? false,
-    };
-  }
-  const own = parseOwnership(scope.ownership);
-  if (own.scope === 'user') {
-    const h = await c.query<HouseholdData>(GET_HOUSEHOLD_Q);
-    filters.ownershipSet = ownershipToSet(own, h.myHousehold.users, h.me.id);
-  }
+  const filters: Record<string, unknown> = { includeHidden, ...(await accountTypeFilters(c, scope)) };
+  const biz = businessEntitySet(scope.businesses, scope.include_unassigned_businesses);
+  if (biz) filters.businessEntitySet = biz;
+  const own = await resolveOwnershipSet(c, scope.ownership);
+  if (own) filters.ownershipSet = own;
   let accounts = (await c.query<AccountsData>(GET_ACCOUNTS_Q, { filters })).accounts;
   if (scope.accounts?.length) {
     const names = new Set(scope.accounts.map((s) => s.toLowerCase()));

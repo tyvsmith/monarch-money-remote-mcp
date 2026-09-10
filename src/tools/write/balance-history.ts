@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineTool, isoDate, jsonArg, ToolInputError } from '../registry.ts';
+import { defineTool, dryRun, isoDate, jsonArg, ToolInputError } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import { GET_ACCOUNTS_Q, type AccountsData } from '../../monarch/ops/accounts.ts';
 import { ACCOUNT_SNAPSHOTS_Q, type AccountSnapshotsData } from '../../monarch/ops/snapshots.ts';
@@ -30,11 +30,7 @@ throwaway manual account before trusting it.`,
     balances: z
       .string()
       .describe('JSON list of {"date": "YYYY-MM-DD", "balance": number} entries. Balance is signed the same way GetAccounts reports it: positive for assets, negative for amounts owed on liabilities. A single entry sets that one day\'s balance.'),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe('if true, returns a preview (date range, snapshots to write, existing snapshots that would be replaced, whether the current balance would change) without writing. Call once with dry_run=true to show the user the effect, then again with dry_run=false to commit.'),
+    dry_run: dryRun('date range, snapshots to write, existing snapshots that would be replaced, whether the current balance would change'),
   },
   handler: async ({ account_id, balances, dry_run }) => {
     const c = await getMonarch();

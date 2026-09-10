@@ -50,3 +50,19 @@ export const nullableList = z.array(z.string()).nullable().optional();
 export const optStr = z.string().nullable().optional();
 export const optBool = z.boolean().nullable().optional();
 export const optNum = z.number().nullable().optional();
+
+/** Official dry_run flag; `preview` names the fields the preview returns. */
+export const dryRun = (preview: string) =>
+  z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      `if true, returns a preview (${preview}) without writing. Call once with dry_run=true to show the user what will change, then call again with dry_run=false to commit.`,
+    );
+
+/** Monarch's BusinessEntitySetInput, or undefined when nothing is requested. */
+export function businessEntitySet(ids: string[] | null | undefined, includeUnassigned: boolean | null | undefined) {
+  if (!ids?.length && !includeUnassigned) return undefined;
+  return { businessEntityIds: ids ?? [], includeUnassigned: includeUnassigned ?? false };
+}

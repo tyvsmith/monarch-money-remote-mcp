@@ -50,9 +50,11 @@ curl -s -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d '{}' localho
 npx @modelcontextprotocol/inspector   # connect to http://localhost:8080/mcp with Authorization: Bearer <KEY>
 ```
 
-The write tools are never exercised by the smoke script. They were verified
-once against a live account during development; `UpdateAccountBalanceHistory`
-was not and says so in its description.
+The smoke script never calls write tools, and development never runs writes
+against the owner's account (see `AGENTS.md`). Write handlers are covered by
+unit tests with a scripted fake client. Their GraphQL mutations were confirmed
+once, before that rule existed, except `UpdateAccountBalanceHistory`, which
+says so in its description.
 
 ## Enroll the Monarch login (first time only)
 
@@ -258,7 +260,7 @@ connector was added.
   service logs in once with the trusted device UUID and saves a fresh
   session. Implementation: `src/session-store.ts` + `src/monarch/session.ts`.
 - **Login cooldown (Monarch upstream).** If login returns 429 or
-  `CAPTCHA_REQUIRED`, the wrapper enters a 1-hour cooldown — incoming requests
+  `CAPTCHA_REQUIRED`, the wrapper enters a 1-hour cooldown: incoming requests
   return HTTP 503 immediately without re-hitting Monarch, so a transient
   lockout doesn't escalate.
 - **Auth-endpoint rate limits.** `/api/auth/sign-in/*` is limited to 10

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineTool, jsonArg, ToolInputError } from '../registry.ts';
+import { defineTool, dryRun, jsonArg, ToolInputError } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import { assertNoPayloadErrors, type PayloadError } from '../lib/mutations.ts';
 import { merchantNameFor } from '../lib/merchants.ts';
@@ -31,11 +31,7 @@ export const UpdateTransactionSplits = defineTool({
     splits: z
       .string()
       .describe("JSON list. Pass [] to unsplit. Each entry must include amount (signed the same way as the parent; outflow negative) and may include merchant_id or merchant_name, category_id, notes, hide_from_reports, tag_ids. Amounts must be whole cents and sum to the parent's amount."),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe('if true, returns a preview ({transaction_amount, current_splits, proposed_splits, proposed_split_count}) without writing. Call once with dry_run=true to show the user the proposed split structure, then call again with dry_run=false to commit.'),
+    dry_run: dryRun('{transaction_amount, current_splits, proposed_splits, proposed_split_count}'),
   },
   handler: async ({ transaction_id, splits, dry_run }) => {
     const c = await getMonarch();

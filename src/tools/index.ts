@@ -25,6 +25,8 @@ import { CreateTransaction, UpdateTransaction, DeleteTransaction } from './write
 import { BulkUpdateTransactions, BulkRecategorizeTransactions } from './write/bulk.ts';
 import { UpdateTransactionSplits } from './write/splits.ts';
 import { CreateGoal, UpdateGoal, DeleteGoal, ContributeToGoal, WithdrawFromGoal } from './write/goals.ts';
+import { UpdateAccountBalanceHistory } from './write/balance-history.ts';
+import { ReportIssue } from './write/report-issue.ts';
 
 // Official order.
 const readTools = [
@@ -69,6 +71,8 @@ const writeTools = [
   DeleteGoal,
   ContributeToGoal,
   WithdrawFromGoal,
+  UpdateAccountBalanceHistory,
+  ReportIssue,
 ] as unknown as ToolDef[];
 
 export const writesEnabled = process.env.MONARCH_ENABLE_WRITES === '1';

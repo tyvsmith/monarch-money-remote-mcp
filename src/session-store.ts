@@ -124,11 +124,3 @@ export async function saveSession(s: SavedSession): Promise<void> {
     console.warn('[session-store] failed to save session:', err);
   }
 }
-
-// Legacy wrappers for src/monarch-client.ts; removed with the SDK.
-export async function loadSavedToken(): Promise<string | null> {
-  return (await loadSavedSession('legacy'))?.token ?? null;
-}
-export async function saveToken(token: string): Promise<void> {
-  await saveSession({ token, deviceUuid: process.env.MONARCH_DEVICE_UUID ?? 'legacy' });
-}

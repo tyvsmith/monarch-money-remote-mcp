@@ -1,14 +1,26 @@
 # monarch-money-remote-mcp
 
-> **Status: stopgap snapshot.** Use the official [Monarch MCP](https://help.monarch.com/hc/en-us/articles/50207234679956-Monarch-MCP-Connector) now.
-> This was originally published as a reference / starting point
-> while I waited for (a) Monarch Money to ship an official API and (b) the
-> v2 release of the [`monarchmoney`](https://www.npmjs.com/package/monarchmoney)
-> TypeScript SDK. The repo is being archived now that an official solution exists.
+> **Status: stand-in for the paused official connector.** Monarch shipped an
+> official [MCP connector](https://help.monarch.com/hc/en-us/articles/50207234679956-Monarch-MCP-Connector)
+> in June 2026 and paused it on June 29 over a data-portability question from
+> a data provider. This service mirrors that connector's 41-tool contract
+> (same names, arguments, and semantics) over Monarch's private GraphQL API so
+> prompts and workflows written against the official one keep working. When
+> Monarch restores it, point clients at `https://api.monarch.com/mcp` directly;
+> this service then becomes a fallback.
 
-Single-tenant Cloud Run service that exposes a Monarch Money account to both
-**Claude Custom Connector** (MCP over Streamable HTTP) and **Custom GPT
-Action** (REST + OpenAPI), backed by [`monarchmoney`](https://www.npmjs.com/package/monarchmoney).
+Single-tenant Cloud Run service that exposes a Monarch Money account to
+**Claude Custom Connector** (MCP over Streamable HTTP), **ChatGPT
+connectors** (same MCP endpoint), and **Custom GPT Actions** (REST + OpenAPI).
+
+Tools: the 17 official read tools (`GetAccounts`, `GetTransactions`,
+`GetBudget`, `GetCashFlow`, `GetCategories`, `GetGoals`, `GetInvestments`,
+`GetMerchants`, `GetNetWorthHistory`, `GetRealEstate`, `GetRecurring`,
+`GetSpendingByCategory`, `GetTags`, `GetCreditScoreHistory`,
+`GetHouseholdMembers`, `GetBusinesses`, `ListRules`) plus the 24 write tools
+(transactions, splits, bulk edits, categories, tags, merchants, rules, goals,
+balance history, `ReportIssue`). **Writes are off by default**; set
+`MONARCH_ENABLE_WRITES=1` on the service to expose them.
 
 One container, three auth modes that all front the same handlers:
 
@@ -16,7 +28,7 @@ One container, three auth modes that all front the same handlers:
 |---|---|---|
 | Claude Custom Connector (new) | `POST /mcp` | **OAuth 2.1** via `/api/auth/oauth2/*` (JWT-signing AS with JWKS at `/api/auth/jwks`) |
 | Claude Custom Connector (legacy) | `POST /mcp` | `Authorization: Bearer <WRAPPER_API_KEY>` (still works) |
-| Custom GPT Action | `GET /accounts`, `/transactions`, … | `X-API-Key: <WRAPPER_API_KEY>` |
+| Custom GPT Action | `POST /tools/{ToolName}` (body = tool args), `GET /tools` | `X-API-Key: <WRAPPER_API_KEY>` |
 
 ## Local dev
 
@@ -28,19 +40,19 @@ npm install
 npm run dev            # node --watch src/index.ts
 ```
 
-Smoke tests:
+Checks:
 
 ```bash
+npm test               # unit tests + offline validation of every GraphQL operation against schema/monarch.graphql
+npm run smoke          # live, read-only: calls every read tool against your account
 KEY=$(grep WRAPPER_API_KEY .env | cut -d= -f2)
-
-# REST
-curl -H "X-API-Key: $KEY" http://localhost:8080/health
-curl -H "X-API-Key: $KEY" http://localhost:8080/accounts | jq '.[0].displayName'
-
-# MCP (via inspector UI)
-npx @modelcontextprotocol/inspector
-# Connect to http://localhost:8080/mcp with header Authorization: Bearer <KEY>
+curl -s -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d '{}' localhost:8080/tools/GetTags
+npx @modelcontextprotocol/inspector   # connect to http://localhost:8080/mcp with Authorization: Bearer <KEY>
 ```
+
+The write tools are never exercised by the smoke script. They were verified
+once against a live account during development; `UpdateAccountBalanceHistory`
+was not and says so in its description.
 
 ## Enroll the Monarch login (first time only)
 
@@ -215,28 +227,40 @@ The original setup still works for existing Claude integrations:
 
 chatgpt.com → My GPTs → Edit → **Create new action**
 
-1. Edit `openapi.yaml`, replace the `servers[0].url` value with your Cloud Run URL.
-2. Paste the contents into the GPT Action schema field.
+1. Regenerate the schema with your URL: `PUBLIC_URL=https://<service>.run.app npm run gen-openapi`.
+2. Paste `openapi.yaml` into the GPT Action schema field (it is JSON; the
+   name is kept for existing setups).
 3. Authentication → **API Key**, custom header `X-API-Key`, value is your
    wrapper API key.
-4. Test the `getAccounts` and `getTransactions` operations from the GPT Builder.
+4. Test the `GetAccounts` and `GetTransactions` operations from the GPT Builder.
+
+ChatGPT's MCP connectors work too: register a `chatgpt` OAuth client (below)
+and add `<URL>/mcp` as a connector, the same way the official Monarch
+connector was added.
 
 ## Notes
 
-- **Read-only.** No write tools are exposed in v1. To add them, extend
-  `src/handlers.ts`, then mirror in `src/rest/router.ts`, `src/mcp/tools.ts`,
-  and `openapi.yaml`.
-- **Session token persists across cold starts.** On first successful login
-  the Monarch session token (valid ~1 year) is saved as a new version of the
-  `monarch-session` GCP Secret. Subsequent cold starts load that token,
-  validate it, and skip the login flow entirely — no per-IP rate-limit risk,
-  scale-to-zero costs nothing. If the token ever expires the wrapper does
-  exactly one full login and saves a fresh one. Implementation:
-  `src/session-store.ts` + `src/monarch-client.ts`.
-- **Rate-limit cooldown (Monarch upstream).** If Monarch ever 429s the
-  login, the wrapper enters a 1-hour cooldown — incoming requests return
-  HTTP 503 immediately without re-hitting Monarch, so a transient lockout
-  doesn't escalate.
+- **Writes are opt-in.** `MONARCH_ENABLE_WRITES=1` exposes the 24 write
+  tools. MCP clients already confirm non-read-only tools with the user;
+  `BulkUpdateTransactions`, `BulkRecategorizeTransactions`,
+  `UpdateTransactionSplits`, and `UpdateAccountBalanceHistory` also take
+  `dry_run: true` to preview. Monarch identifies merchants by name on writes,
+  so `CreateMerchant` returns an existing id or tells the caller to pass
+  `merchant_name`; every write tool that takes `merchant_id` accepts
+  `merchant_name` too.
+- **Schema is vendored.** `schema/monarch.graphql` comes from the web app
+  bundle (`npm run extract-schema`); `npm run check-ops` validates every
+  query offline. See `schema/README.md`.
+- **Session persists across cold starts.** The `monarch-session` secret
+  holds `{token, deviceUuid}` (seeded by `npm run monarch:enroll` +
+  `deploy:rotate-secrets`). Cold starts load it, validate with one `me`
+  query, and skip login. Tokens carry no expiration; if one is revoked the
+  service logs in once with the trusted device UUID and saves a fresh
+  session. Implementation: `src/session-store.ts` + `src/monarch/session.ts`.
+- **Login cooldown (Monarch upstream).** If login returns 429 or
+  `CAPTCHA_REQUIRED`, the wrapper enters a 1-hour cooldown — incoming requests
+  return HTTP 503 immediately without re-hitting Monarch, so a transient
+  lockout doesn't escalate.
 - **Auth-endpoint rate limits.** `/api/auth/sign-in/*` is limited to 10
   attempts per IP per 15 minutes; the rest of `/api/auth/*` (token refresh,
   JWKS, authorize) to 100. Returns HTTP 429 when exhausted. Cloud Run sits

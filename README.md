@@ -42,6 +42,30 @@ npx @modelcontextprotocol/inspector
 # Connect to http://localhost:8080/mcp with header Authorization: Bearer <KEY>
 ```
 
+## Enroll the Monarch login (first time only)
+
+Monarch gates `/auth/login/` behind a CAPTCHA and a new-device email code.
+A login sent with `trusted_device: true` marks its `Device-UUID` as trusted,
+after which logins from that UUID skip the email code. The service must
+therefore always present the same UUID, and the first login should happen
+from a laptop where you can read the email.
+
+```bash
+npm run monarch:enroll                         # logs in with .env creds; prompts for the emailed code if asked
+npm run monarch:enroll -- --import ~/.mm/session.json   # or reuse a session an older SDK login created
+```
+
+On success it writes `MONARCH_DEVICE_UUID` to `.env` and the session
+(`{token, deviceUuid}`) to `.monarch-session.json` (gitignored).
+`npm run deploy:bootstrap` / `deploy:rotate-secrets` push both to Secret
+Manager (`monarch-device-uuid`, `monarch-session`), so Cloud Run resumes the
+enrolled session and never logs in as a new device.
+
+If Monarch answers `CAPTCHA_REQUIRED`, wait and retry from a different
+network (home Wi-Fi, not a VPN or cloud host). There is no headless path
+through the CAPTCHA. The account needs MFA enabled with the authenticator
+secret in `MONARCH_MFA_SECRET`; tokens themselves do not expire.
+
 ## Google Cloud setup (first time only)
 
 Before you can deploy, you need a GCP project with billing enabled and the
@@ -88,6 +112,7 @@ accounts, or push secrets in the UI — the deploy script does all of that.
    cp .env.example .env
    $EDITOR .env
    # Set MONARCH_EMAIL, MONARCH_PASSWORD, MONARCH_MFA_SECRET,
+   # MONARCH_DEVICE_UUID (written by npm run monarch:enroll),
    # WRAPPER_API_KEY (generate: openssl rand -base64 48 | tr -d '\n'),
    # and GCP_PROJECT_ID (and GCP_REGION / GCP_SERVICE if you want non-defaults).
    ```

@@ -33,8 +33,13 @@ short-circuits; everything else delegates to MCP SDK's `requireBearerAuth`.
 | `src/auth/secret-manager-adapter.ts` | Custom better-auth Adapter backed by a single `oauth-state` Secret Manager secret. Mirrors `src/session-store.ts` write-through pattern with version cleanup. |
 | `src/auth/oauth-clients.ts` | Loads the `oauth-clients` Secret Manager JSON blob (N trusted OAuth clients) and maps each entry into better-auth's `trustedClients` shape. Read-only at runtime; managed via `scripts/deploy.ts --new-client|--list-clients|--remove-client`. Falls back to legacy `OAUTH_CLIENT_ID`/`OAUTH_CLIENT_SECRET` env vars only during migration. |
 | `src/config.ts` | Env loader (Secret Manager surfaces secrets as env on Cloud Run) |
-| `src/session-store.ts` | Monarch session-token persistence to Secret Manager (template for adapter pattern) |
-| `src/monarch-client.ts` | Cached `MonarchClient` singleton |
+| `src/session-store.ts` | `{token, deviceUuid}` persistence: Secret Manager on Cloud Run, `.monarch-session.json` locally |
+| `src/monarch/client.ts` | GraphQL/REST fetch wrapper: browser header set, `Device-UUID`, error mapping, one retry on 401 |
+| `src/monarch/login.ts` | `POST /auth/login/` with TOTP; surfaces `EMAIL_OTP_REQUIRED` / `CAPTCHA_REQUIRED` as `MonarchError.code` |
+| `src/monarch/session.ts` | `getMonarch()` singleton: resume saved session, validate, login once, 1h cooldown on 429/CAPTCHA |
+| `src/monarch-client.ts` | Legacy SDK singleton; removed once tools move to `src/monarch/` |
+| `schema/monarch.graphql` | Vendored schema from the web bundle; `npm run check-ops` validates `src/monarch/ops/*_Q` against it |
+| `scripts/enroll.ts` | One-time login from a laptop to get a trusted device UUID + token |
 | `src/handlers.ts` | Pure functions over the shared client (the source of truth) |
 | `src/rest/router.ts` | Express adapters around `handlers.ts` |
 | `src/mcp/server.ts` | Streamable HTTP transport |
@@ -99,8 +104,9 @@ Secrets live in Google Secret Manager:
 | Secret | Purpose |
 |---|---|
 | `monarch-email`, `monarch-password`, `monarch-mfa` | Monarch login credentials |
+| `monarch-device-uuid` | Device UUID Monarch trusts for this login. Written by `npm run monarch:enroll`; a new UUID risks CAPTCHA / email OTP on login |
 | `wrapper-api-key` | Static auth token (also reused as OAuth user password) |
-| `monarch-session` | Persisted Monarch session token (skips re-login on cold start) |
+| `monarch-session` | Persisted `{token, deviceUuid}` JSON (legacy bare token still accepted). Seeded by `deploy:rotate-secrets` from `.monarch-session.json` |
 | `oauth-state` | Single JSON blob holding all better-auth state (users, sessions, refresh tokens, JWKS keys). Versioned, write-through cached by `secret-manager-adapter.ts`. |
 | `oauth-clients` | Single JSON-array blob — one entry per pre-registered trusted OAuth client (`name`, `clientId`, `clientSecret`, `redirects`, `skipConsent`). Managed via `npm run deploy:new-client|list-clients|remove-client`. Read at boot by `src/auth/oauth-clients.ts`. |
 | `auth-user-email` | Email for the seeded single user |
@@ -117,4 +123,9 @@ bump (no redeploy).
   version and treat unexpected GraphQL errors as a signal to bump
   `monarchmoney` and retest, not as a bug in this codebase.
 - MFA is TOTP; clock drift on the host will cause auth failures. Cloud Run
-  is fine, local can drift.
+  is fine, local can drift. A TOTP code cannot be reused inside its 30 s
+  window.
+- Login from an unknown `Device-UUID` can return `EMAIL_OTP_REQUIRED` or
+  `CAPTCHA_REQUIRED`. Keep `MONARCH_DEVICE_UUID` stable; never generate a new
+  one on Cloud Run. Requests without a browser-like `User-Agent` get a
+  Cloudflare 403.

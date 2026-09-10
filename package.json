@@ -1,6 +1,6 @@
 {
   "name": "monarch-money-remote-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Single-tenant Cloud Run bridge exposing Monarch Money as MCP (for Claude) and REST (for Custom GPT Actions)",
   "license": "Apache-2.0",
@@ -21,7 +21,7 @@
     "test": "node --test test/ && node scripts/check-ops.ts",
     "check-ops": "node scripts/check-ops.ts",
     "extract-schema": "node scripts/extract-schema.ts",
-    "gen-openapi": "node scripts/gen-openapi.ts",
+    "gen-openapi": "node --env-file-if-exists=.env scripts/gen-openapi.ts",
     "smoke": "node --env-file-if-exists=.env scripts/smoke.ts",
     "monarch:enroll": "node --env-file-if-exists=.env scripts/enroll.ts"
   },

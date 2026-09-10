@@ -20,16 +20,25 @@ function resolveIssuerUrl(port: number): string {
 
 const port = Number(process.env.PORT ?? 8080);
 
+// Monarch credentials are read lazily so tooling (tests, gen-openapi,
+// check-ops) can import tool modules without a configured environment. The
+// server still fails fast: src/index.ts touches them at boot.
 export const config = {
-  monarchEmail: required('MONARCH_EMAIL'),
-  monarchPassword: required('MONARCH_PASSWORD'),
+  get monarchEmail(): string {
+    return required('MONARCH_EMAIL');
+  },
+  get monarchPassword(): string {
+    return required('MONARCH_PASSWORD');
+  },
   monarchMfaSecret: optional('MONARCH_MFA_SECRET'),
   monarchBaseUrl: (optional('MONARCH_BASE_URL') ?? 'https://api.monarch.com').replace(/\/$/, ''),
   // Device UUID Monarch already trusts for this login (set by `npm run
   // monarch:enroll`). A fresh UUID looks like a new device and can trigger an
   // email OTP or CAPTCHA that a server cannot answer, so keep it stable.
   monarchDeviceUuid: optional('MONARCH_DEVICE_UUID'),
-  wrapperApiKey: required('WRAPPER_API_KEY'),
+  get wrapperApiKey(): string {
+    return required('WRAPPER_API_KEY');
+  },
   port,
   // ----- OAuth 2.1 (better-auth) -----
   // Single end-user identity used by the credentials provider. Password is

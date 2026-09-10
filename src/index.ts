@@ -5,6 +5,11 @@ import { buildAuthRouter } from './auth/router.ts';
 import { restRouter } from './rest/router.ts';
 import { mcpHandler } from './mcp/server.ts';
 
+// Fail fast on missing credentials before serving anything.
+void config.monarchEmail;
+void config.monarchPassword;
+void config.wrapperApiKey;
+
 const app = express();
 
 app.disable('x-powered-by');
@@ -61,7 +66,7 @@ const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     stack: e.stack,
   });
 
-  res.status(status).json({ error: message });
+  res.status(status).json({ error: message, code: typeof e.code === 'string' ? e.code : undefined });
 };
 app.use(errorHandler);
 

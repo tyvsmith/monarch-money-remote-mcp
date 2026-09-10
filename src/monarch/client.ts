@@ -33,8 +33,8 @@ export interface ClientOptions {
   baseUrl?: string;
   token: () => Promise<string>;
   deviceUuid: string;
-  /** Called once on a 401; the request is retried once afterwards. */
-  onUnauthorized?: () => Promise<void>;
+  /** Called on a 401 with the token that was rejected; the request is retried once afterwards. */
+  onUnauthorized?: (rejectedToken: string) => Promise<void>;
   fetchImpl?: typeof fetch;
 }
 
@@ -91,7 +91,7 @@ export function createClient(opts: ClientOptions): MonarchClient {
     };
     const res = await fetchImpl(`${base}${path}`, { ...init, headers });
     if (res.status === 401 && retry && opts.onUnauthorized) {
-      await opts.onUnauthorized();
+      await opts.onUnauthorized(token);
       return send(path, init, false);
     }
     return res;

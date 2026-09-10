@@ -51,3 +51,27 @@ test('a CAPTCHA on re-login starts the cooldown; later calls fail fast without l
   await assert.rejects(getMonarch(), (e: Error & { code?: string }) => e.code === 'COOLDOWN');
   assert.equal(state.logins, before);
 });
+
+test('a 401 carrying an already-replaced token does not log in again', async () => {
+  // Reset cooldown state by re-importing is not possible; exercise the client hook directly instead.
+  const { createClient } = await import('../../src/monarch/client.ts');
+  let current = 'old';
+  let refreshes = 0;
+  const c = createClient({
+    token: async () => current,
+    deviceUuid: 'dev',
+    fetchImpl: (async (_url: string | URL, init?: RequestInit) => {
+      const t = (init?.headers as Record<string, string>).Authorization;
+      return t === 'Token new'
+        ? new Response(JSON.stringify({ data: { me: { id: '1' } } }), { status: 200 })
+        : new Response(JSON.stringify({ detail: 'Invalid token.' }), { status: 401 });
+    }) as typeof fetch,
+    onUnauthorized: async (rejected) => {
+      if (rejected !== current) return; // stale; sibling already refreshed
+      refreshes += 1;
+      current = 'new';
+    },
+  });
+  await Promise.all([c.query('query { me { id } }'), c.query('query { me { id } }')]);
+  assert.equal(refreshes, 1);
+});

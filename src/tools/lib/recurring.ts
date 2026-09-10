@@ -43,10 +43,12 @@ export function bucketRecurring(items: RecurringItem[]) {
   let monthly_income = 0;
   for (const i of items) {
     const s = shapeRecurring(i);
-    const t = i.category?.group.type;
+    // Monarch's own classification wins; category type is the fallback when it is missing.
+    const rt = i.stream.recurringType;
+    const t = rt ?? i.category?.group.type;
     if (i.stream.creditReportLiabilityAccount?.liabilityType === 'CreditCard') credit_card_payments.push(s);
     else if (t === 'transfer') transfers.push(s);
-    else if (t === 'income' || i.stream.recurringType === 'income' || (i.stream.amount ?? 0) > 0) {
+    else if (t === 'income' || (rt == null && (i.stream.amount ?? 0) > 0)) {
       income.push(s);
       monthly_income += monthlyAmount(i.stream.amount, i.stream.frequency);
     } else {

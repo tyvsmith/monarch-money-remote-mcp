@@ -40,7 +40,7 @@ function buildServer(): McpServer {
       },
       async (args) => {
         const r = await invokeTool(t, args);
-        if (r.ok) return { content: [{ type: 'text' as const, text: JSON.stringify(r.data, null, 1) }] };
+        if (r.ok) return { content: [{ type: 'text' as const, text: JSON.stringify(r.data) }] };
         return { isError: true, content: [{ type: 'text' as const, text: JSON.stringify(r.failure) }] };
       },
     );

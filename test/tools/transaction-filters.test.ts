@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTransactionFilter } from '../../src/tools/lib/transaction-filters.ts';
 
+const cats = [{ id: 'c1', name: 'Groceries', groupId: 'g1', groupName: 'Food' }];
 const ctx = {
-  categories: [{ id: 'c1', name: 'Groceries', groupId: 'g1', groupName: 'Food' }],
+  categories: async () => cats,
   resolveMerchantIds: async (names: string[]) => names.map((n) => `m:${n}`),
   resolveAccountIds: async () => ['a1'],
 };
@@ -33,7 +34,7 @@ test('merchant and account names resolve through the context', async () => {
 });
 
 test('names that resolve to nothing are errors, not silent widening', async () => {
-  const empty = { categories: ctx.categories, resolveMerchantIds: async () => [], resolveAccountIds: async () => [] };
+  const empty = { categories: async () => cats, resolveMerchantIds: async () => [], resolveAccountIds: async () => [] };
   await assert.rejects(buildTransactionFilter({ filters: { merchants: ['Costcoo'] } }, empty), /merchants not found/);
   await assert.rejects(buildTransactionFilter({ filters: { accounts: ['Bogus'] } }, empty), /accounts not found/);
   await assert.rejects(buildTransactionFilter({ filters: { categories: ['Nonexistent'] } }, empty), /categories not found/);

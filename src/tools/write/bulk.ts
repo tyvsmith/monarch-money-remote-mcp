@@ -52,7 +52,9 @@ async function runBulk(c: MonarchClient, sel: { ids?: string[]; filters?: Record
     : { allSelected: true, filters: sel.filters, expectedAffectedTransactionCount: expected, updates };
   const d = await c.query<{ bulkUpdateTransactions: BulkResult }>(BULK_UPDATE_TRANSACTIONS_Q, vars);
   const r = d.bulkUpdateTransactions;
-  if (!r.success) throw new Error(`bulk update failed: ${(r.errors ?? []).map((e) => e.message).join('; ') || 'unknown error'}`);
+  if (!r.success) {
+    throw new ToolInputError(`Monarch rejected the bulk update: ${(r.errors ?? []).map((e) => e.message).join('; ') || 'no detail (the matching set may have changed since the dry run)'}`);
+  }
   return r.affectedCount ?? expected;
 }
 

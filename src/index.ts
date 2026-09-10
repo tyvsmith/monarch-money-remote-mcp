@@ -35,37 +35,13 @@ const auth = apiKeyAuth(config.wrapperApiKey);
 app.post('/mcp', auth, mcpHandler);
 app.use('/', auth, restRouter);
 
+// Only errors raised outside tool handlers reach here (body parsing, auth
+// middleware); invokeTool maps everything from tools itself.
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
-  const e = err as {
-    statusCode?: unknown;
-    code?: unknown;
-    name?: unknown;
-    message?: unknown;
-    stack?: unknown;
-    cause?: unknown;
-    response?: { status?: unknown; data?: unknown; body?: unknown };
-    graphQLErrors?: unknown;
-    errors?: unknown;
-  };
-  const status = typeof e.statusCode === 'number' ? (e.statusCode as number) : 500;
+  const e = err as { statusCode?: unknown; code?: unknown; message?: unknown; stack?: unknown };
+  const status = typeof e.statusCode === 'number' ? e.statusCode : 500;
   const message = err instanceof Error ? err.message : 'internal error';
-
-  console.error('[error]', {
-    method: req.method,
-    path: req.originalUrl,
-    status,
-    name: e.name,
-    code: e.code,
-    message,
-    cause: e.cause,
-    graphQLErrors: e.graphQLErrors,
-    errors: e.errors,
-    response: e.response
-      ? { status: e.response.status, data: e.response.data, body: e.response.body }
-      : undefined,
-    stack: e.stack,
-  });
-
+  console.error('[error]', { method: req.method, path: req.originalUrl, status, message, stack: e.stack });
   res.status(status).json({ error: message, code: typeof e.code === 'string' ? e.code : undefined });
 };
 app.use(errorHandler);

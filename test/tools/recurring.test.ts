@@ -35,3 +35,11 @@ test('inbound transfers are transfers, not income', () => {
   assert.equal(b.income.length, 0);
   assert.equal(b.totals.monthly_income, 0);
 });
+
+test("Monarch's recurringType beats a miscategorized category group", () => {
+  const i = item({ amount: -4693, type: 'income' });
+  i.stream.recurringType = 'expense';
+  const b = bucketRecurring([i]);
+  assert.equal(b.expenses.length, 1);
+  assert.equal(b.income.length, 0);
+});

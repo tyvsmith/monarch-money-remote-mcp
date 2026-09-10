@@ -62,7 +62,9 @@ function makeClient(): MonarchClient {
     baseUrl: config.monarchBaseUrl,
     deviceUuid: session!.deviceUuid,
     token: async () => session!.token,
-    onUnauthorized: async () => {
+    onUnauthorized: async (rejectedToken) => {
+      // A request sent with the old token can 401 after a sibling already refreshed; retrying with the new token is enough.
+      if (rejectedToken !== session!.token) return;
       console.warn('[monarch] token rejected; refreshing session');
       await refreshSession(session!.deviceUuid);
     },

@@ -14,10 +14,12 @@ import { GET_MERCHANTS_Q, type MerchantsData } from '../../monarch/ops/merchants
 import { GET_ACCOUNTS_Q, type AccountsData } from '../../monarch/ops/accounts.ts';
 import { buildTransactionFilter, txnFilterSchema, type FilterContext } from '../lib/transaction-filters.ts';
 
-export async function filterContext(c: MonarchClient): Promise<FilterContext> {
-  const { categoryGroups } = await c.query<CategoryGroupData>(GET_CATEGORIES_Q);
+export function filterContext(c: MonarchClient): FilterContext {
   return {
-    categories: categoryGroups.flatMap((g) => g.categories.map((k) => ({ id: k.id, name: k.name, groupId: g.id, groupName: g.name }))),
+    categories: async () => {
+      const { categoryGroups } = await c.query<CategoryGroupData>(GET_CATEGORIES_Q);
+      return categoryGroups.flatMap((g) => g.categories.map((k) => ({ id: k.id, name: k.name, groupId: g.id, groupName: g.name })));
+    },
     resolveMerchantIds: async (names) => {
       const ids: string[] = [];
       for (const n of names) {
@@ -132,7 +134,7 @@ the referenced entities.`,
   handler: async (a) => {
     const c = await getMonarch();
     const filters = jsonArg(a.filters, txnFilterSchema, 'filters');
-    const gql = await buildTransactionFilter({ start_date: a.start_date, end_date: a.end_date, filters }, await filterContext(c));
+    const gql = await buildTransactionFilter({ start_date: a.start_date, end_date: a.end_date, filters }, filterContext(c));
     if (a.total_count_only) {
       const d = await c.query<CountData>(COUNT_TRANSACTIONS_Q, { filters: gql });
       return { total_count: d.allTransactions.totalCount };

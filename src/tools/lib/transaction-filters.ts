@@ -30,8 +30,15 @@ export const txnFilterSchema = z.object({
 });
 export type TxnFilterArg = z.infer<typeof txnFilterSchema>;
 
+export interface CategoryRef {
+  id: string;
+  name: string;
+  groupId: string;
+  groupName: string;
+}
 export interface FilterContext {
-  categories: Array<{ id: string; name: string; groupId: string; groupName: string }>;
+  /** Fetched only when name-based category filters are present. */
+  categories: () => Promise<CategoryRef[]>;
   resolveMerchantIds: (names: string[]) => Promise<string[]>;
   resolveAccountIds: (names: string[]) => Promise<string[]>;
 }
@@ -66,14 +73,15 @@ export async function buildTransactionFilter(
   const catIds = [...(f.category_ids ?? [])];
   const groupIds = new Set<string>();
   const unknownCategories: string[] = [];
+  const known = f.categories?.length ? await ctx.categories() : [];
   for (const name of f.categories ?? []) {
     const n = name.toLowerCase();
-    const cats = ctx.categories.filter((c) => c.name.toLowerCase() === n);
+    const cats = known.filter((c) => c.name.toLowerCase() === n);
     if (cats.length) {
       catIds.push(...cats.map((c) => c.id));
       continue;
     }
-    const groups = ctx.categories.filter((c) => c.groupName.toLowerCase() === n).map((c) => c.groupId);
+    const groups = known.filter((c) => c.groupName.toLowerCase() === n).map((c) => c.groupId);
     if (groups.length) groups.forEach((g) => groupIds.add(g));
     else unknownCategories.push(name);
   }

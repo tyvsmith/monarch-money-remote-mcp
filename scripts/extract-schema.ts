@@ -1,4 +1,5 @@
-// Refresh schema/monarch.graphql and docs/research/<date>/web-app-ops from the live web bundle.
+// Refresh schema/monarch.graphql from the live web bundle. The web app's own operations are dumped to
+// .cache/web-app-ops/ (gitignored) as a reference when writing new documents.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { buildClientSchema, printSchema, type IntrospectionQuery } from 'graphql';
 
@@ -64,7 +65,7 @@ for (const url of urls) {
 if (!schemaJson) throw new Error('no bundle contained the introspection JSON');
 
 const date = new Date().toISOString().slice(0, 10);
-const opsDir = `docs/research/monarch-api-${date}/web-app-ops`;
+const opsDir = '.cache/web-app-ops';
 await mkdir('schema', { recursive: true });
 await mkdir(opsDir, { recursive: true });
 const header = `# Monarch web app ${version} (${urls.map((u) => u.split('/').pop()).join(', ')}), captured ${date}. Refresh: npm run extract-schema\n`;

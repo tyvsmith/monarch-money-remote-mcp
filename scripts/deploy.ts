@@ -156,6 +156,9 @@ function putSecret(name: string, value: string): void {
       ['secrets', 'create', name, `--project=${PROJECT_ID}`, '--data-file=-'],
       { stdin: value },
     );
+    // A secret created after bootstrap (e.g. monarch-device-uuid on an
+    // upgraded deployment) still needs the runtime SA to read it.
+    bindSecretRole(name, 'roles/secretmanager.secretAccessor');
   }
 }
 
@@ -569,6 +572,7 @@ function bootstrap(): void {
     'monarch-email',
     'monarch-password',
     'monarch-mfa',
+    'monarch-device-uuid',
     'wrapper-api-key',
     'monarch-session',
     'oauth-state',
@@ -598,7 +602,33 @@ function pushAllSecrets(): void {
   putSecret('monarch-email', required('MONARCH_EMAIL'));
   putSecret('monarch-password', required('MONARCH_PASSWORD'));
   putSecret('monarch-mfa', required('MONARCH_MFA_SECRET'));
+  putSecret('monarch-device-uuid', required('MONARCH_DEVICE_UUID'));
   putSecret('wrapper-api-key', required('WRAPPER_API_KEY'));
+  pushEnrolledSession();
+}
+
+// `npm run monarch:enroll` logs in from a laptop (where Monarch's CAPTCHA and
+// new-device checks are least likely to fire) and writes the token + trusted
+// device UUID to a local file. Pushing that file as the monarch-session secret
+// lets Cloud Run resume the enrolled session instead of logging in itself.
+function pushEnrolledSession(): void {
+  const file = lookup('MONARCH_SESSION_FILE') ?? '.monarch-session.json';
+  if (!existsSync(file)) {
+    console.log(`no ${file}; Cloud Run will log in on first request (run npm run monarch:enroll to avoid that)`);
+    return;
+  }
+  const raw = readFileSync(file, 'utf8').trim();
+  const parsed = JSON.parse(raw) as { token?: string; deviceUuid?: string };
+  if (!parsed.token || !parsed.deviceUuid) {
+    console.error(`${file} must contain {token, deviceUuid}`);
+    process.exit(1);
+  }
+  if (parsed.deviceUuid !== required('MONARCH_DEVICE_UUID')) {
+    console.error(`${file} deviceUuid does not match MONARCH_DEVICE_UUID in .env; re-run npm run monarch:enroll`);
+    process.exit(1);
+  }
+  ensureSessionSecretContainer();
+  putSecret('monarch-session', raw);
 }
 
 function deploy(): void {
@@ -618,7 +648,7 @@ function deploy(): void {
   ]);
   const explicitIssuer = (existingUrl.stdout ?? '').trim();
 
-  const envVars: string[] = [`GCP_PROJECT_ID=${PROJECT_ID}`];
+  const envVars: string[] = [`GCP_PROJECT_ID=${PROJECT_ID}`, `MONARCH_ENABLE_WRITES=${lookup('MONARCH_ENABLE_WRITES') === '1' ? '1' : '0'}`];
   if (explicitIssuer) envVars.push(`ISSUER_URL=${explicitIssuer}`);
 
   // OAuth client credentials are NOT mounted as env vars anymore — the
@@ -628,6 +658,7 @@ function deploy(): void {
     'MONARCH_EMAIL=monarch-email:latest',
     'MONARCH_PASSWORD=monarch-password:latest',
     'MONARCH_MFA_SECRET=monarch-mfa:latest',
+    'MONARCH_DEVICE_UUID=monarch-device-uuid:latest',
     'WRAPPER_API_KEY=wrapper-api-key:latest',
     'AUTH_USER_EMAIL=auth-user-email:latest',
   ].join(',');

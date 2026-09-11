@@ -7,3 +7,4 @@ dist
 .env.*
 *.log
 README.md
+.monarch-session.json

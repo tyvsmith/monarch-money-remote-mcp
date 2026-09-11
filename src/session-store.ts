@@ -1,5 +1,11 @@
-// Persist the Monarch session token to GCP Secret Manager so cold starts
-// can skip the full login. Token validity is ~1 year per the SDK maintainer.
+// Persist the Monarch session (token + trusted device UUID) so cold starts
+// can skip the full login. Tokens issued by /auth/login/ carry no expiration;
+// the device UUID is what lets a future login skip Monarch's new-device
+// email OTP, so it travels with the token.
+//
+// Backend: GCP Secret Manager when running on Cloud Run (or forced), else a
+// local JSON file (MONARCH_SESSION_FILE, default .monarch-session.json) for
+// development and the enroll command.
 //
 // Gated on running inside Cloud Run (K_SERVICE env var) or having an explicit
 // ADC override (GOOGLE_APPLICATION_CREDENTIALS, or
@@ -8,9 +14,27 @@
 // when no credentials are available, so we MUST avoid instantiating it when
 // we know we don't have creds.
 
+import { readFile, writeFile } from 'node:fs/promises';
 import type { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 const SECRET_NAME = process.env.SESSION_SECRET_NAME ?? 'monarch-session';
+const LOCAL_FILE = process.env.MONARCH_SESSION_FILE ?? '.monarch-session.json';
+
+export interface SavedSession {
+  token: string;
+  deviceUuid: string;
+}
+
+/** Accepts the JSON form and the legacy bare-token form. */
+export function parseSavedSession(raw: string, fallbackDeviceUuid: string): SavedSession | null {
+  const s = raw.trim();
+  if (!s) return null;
+  if (s.startsWith('{')) {
+    const j = JSON.parse(s) as Partial<SavedSession>;
+    return j.token ? { token: j.token, deviceUuid: j.deviceUuid ?? fallbackDeviceUuid } : null;
+  }
+  return { token: s, deviceUuid: fallbackDeviceUuid };
+}
 
 function isAvailable(): boolean {
   if (process.env.SESSION_STORE_FORCE_ENABLE === '1') return true;
@@ -45,45 +69,62 @@ function secretParent(): string | null {
   return p ? `projects/${p}/secrets/${SECRET_NAME}` : null;
 }
 
-export async function loadSavedToken(): Promise<string | null> {
-  if (!isAvailable()) return null;
+async function readRaw(): Promise<string | null> {
+  if (!isAvailable()) {
+    try {
+      return await readFile(LOCAL_FILE, 'utf8');
+    } catch {
+      return null;
+    }
+  }
   const parent = secretParent();
   if (!parent) return null;
   const client = await getClient();
   if (!client) return null;
   try {
-    const [v] = await client.accessSecretVersion({
-      name: `${parent}/versions/latest`,
-    });
+    const [v] = await client.accessSecretVersion({ name: `${parent}/versions/latest` });
     const data = v.payload?.data;
     if (!data) return null;
-    const s = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
-    return s.trim() || null;
+    return Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
   } catch (err: unknown) {
     const code = (err as { code?: number | string })?.code;
-    // 5 = NOT_FOUND (first run, no version yet) — silent.
-    // 7 = PERMISSION_DENIED — silent.
-    if (code !== 5 && code !== 7) {
-      console.warn('[session-store] failed to load saved token:', err);
-    }
+    // 5 = NOT_FOUND (first run, no version yet), 7 = PERMISSION_DENIED: silent.
+    if (code !== 5 && code !== 7) console.warn('[session-store] failed to load saved session:', err);
     return null;
   }
 }
 
-export async function saveToken(token: string): Promise<void> {
-  if (!isAvailable()) return;
+export async function loadSavedSession(fallbackDeviceUuid: string): Promise<SavedSession | null> {
+  const raw = await readRaw();
+  if (raw === null) return null;
+  try {
+    return parseSavedSession(raw, fallbackDeviceUuid);
+  } catch (err) {
+    console.warn('[session-store] saved session is not valid JSON; ignoring:', err);
+    return null;
+  }
+}
+
+export async function saveSession(s: SavedSession): Promise<void> {
+  if (!s.token) return;
+  const payload = JSON.stringify({ token: s.token, deviceUuid: s.deviceUuid });
+  if (!isAvailable()) {
+    try {
+      await writeFile(LOCAL_FILE, payload + '\n', { mode: 0o600 });
+      console.log(`[session-store] saved session to ${LOCAL_FILE}`);
+    } catch (err) {
+      console.warn(`[session-store] could not write ${LOCAL_FILE}; session lives in memory only:`, err);
+    }
+    return;
+  }
   const parent = secretParent();
   if (!parent) return;
-  if (!token) return;
   const client = await getClient();
   if (!client) return;
   try {
-    await client.addSecretVersion({
-      parent,
-      payload: { data: Buffer.from(token, 'utf8') },
-    });
-    console.log('[session-store] saved new session token version');
+    await client.addSecretVersion({ parent, payload: { data: Buffer.from(payload, 'utf8') } });
+    console.log('[session-store] saved new session version');
   } catch (err: unknown) {
-    console.warn('[session-store] failed to save session token:', err);
+    console.warn('[session-store] failed to save session:', err);
   }
 }

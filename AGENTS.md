@@ -1,16 +1,17 @@
-# AGENTS.md — monarch-money-remote-mcp
+# AGENTS.md: monarch-money-remote-mcp
 
 Single-tenant Cloud Run service that exposes one Monarch Money account to
-both Claude (via MCP) and Custom GPT (via REST + OpenAPI), backed by the
-`monarchmoney` npm SDK.
+Claude and ChatGPT (via MCP) and Custom GPT (via REST + OpenAPI). It mirrors
+the official Monarch MCP's 41-tool contract over Monarch's private GraphQL
+API while the official connector is paused.
 
 ## Architecture in 10 seconds
 
 ```
 claude.ai web     ──Bearer <OAuth JWT/opaque>──▶ POST /mcp   ┐
 Claude Desktop /  ──Bearer $WRAPPER_API_KEY ───▶ POST /mcp   │
-  mcp-remote                                                  ├─▶ shared MonarchClient ──▶ Monarch GraphQL
-Custom GPT        ──X-API-Key: $WRAPPER_API_KEY▶ GET  /…     ┘
+  mcp-remote                                                  ├─▶ tools registry ──▶ src/monarch/* ──▶ Monarch GraphQL
+Custom GPT        ──X-API-Key: $WRAPPER_API_KEY▶ POST /tools/{Name} ┘
 
 OAuth AS lives in-process:  better-auth (oidcProvider plugin) at /api/auth/*
 RS metadata:                /.well-known/oauth-protected-resource (RFC 9728)
@@ -25,7 +26,7 @@ short-circuits; everything else delegates to MCP SDK's `requireBearerAuth`.
 
 | Path | Role |
 |---|---|
-| `src/index.ts` | Express entrypoint, mounts `/health`, `/mcp`, `/rest/*`, OAuth surface, `trust proxy=1` for Cloud Run |
+| `src/index.ts` | Express entrypoint, mounts `/health`, `/mcp`, `/tools/*`, OAuth surface, `trust proxy=1` for Cloud Run |
 | `src/auth.ts` | Dual-mode auth: static `WRAPPER_API_KEY` short-circuit, else delegates to MCP SDK's `requireBearerAuth` with the JWT verifier |
 | `src/auth/better-auth.ts` | better-auth instance (JWT plugin + oidcProvider plugin); seeds the single user; defines the pre-registered trusted client |
 | `src/auth/verifier.ts` | `OAuthTokenVerifier` impl. Tries JWT validation against JWKS, falls back to opaque-token introspection via the adapter. Throws `InvalidTokenError` so 401s render properly. |
@@ -33,43 +34,57 @@ short-circuits; everything else delegates to MCP SDK's `requireBearerAuth`.
 | `src/auth/secret-manager-adapter.ts` | Custom better-auth Adapter backed by a single `oauth-state` Secret Manager secret. Mirrors `src/session-store.ts` write-through pattern with version cleanup. |
 | `src/auth/oauth-clients.ts` | Loads the `oauth-clients` Secret Manager JSON blob (N trusted OAuth clients) and maps each entry into better-auth's `trustedClients` shape. Read-only at runtime; managed via `scripts/deploy.ts --new-client|--list-clients|--remove-client`. Falls back to legacy `OAUTH_CLIENT_ID`/`OAUTH_CLIENT_SECRET` env vars only during migration. |
 | `src/config.ts` | Env loader (Secret Manager surfaces secrets as env on Cloud Run) |
-| `src/session-store.ts` | Monarch session-token persistence to Secret Manager (template for adapter pattern) |
-| `src/monarch-client.ts` | Cached `MonarchClient` singleton |
-| `src/handlers.ts` | Pure functions over the shared client (the source of truth) |
-| `src/rest/router.ts` | Express adapters around `handlers.ts` |
-| `src/mcp/server.ts` | Streamable HTTP transport |
-| `src/mcp/tools.ts` | MCP tool registrations around `handlers.ts` |
-| `openapi.yaml` | OpenAPI 3.1 for Custom GPT Action |
+| `src/session-store.ts` | `{token, deviceUuid}` persistence: `monarch-session` secret on Cloud Run, `.monarch-session.json` (`MONARCH_SESSION_FILE`) locally |
+| `src/monarch/client.ts` | GraphQL/REST fetch wrapper: browser header set, `Device-UUID`, error mapping, one retry on 401 |
+| `src/monarch/login.ts` | `POST /auth/login/` with TOTP; surfaces `EMAIL_OTP_REQUIRED` / `CAPTCHA_REQUIRED` as `MonarchError.code` |
+| `src/monarch/session.ts` | `getMonarch()` singleton: resume saved session, validate, single-flight login, 1h cooldown on `RATE_LIMIT` / `CAPTCHA_REQUIRED` / `EMAIL_OTP_REQUIRED` |
+| `schema/monarch.graphql` | Vendored schema from the web bundle; `npm run check-ops` validates `src/monarch/ops/*_Q` against it |
+| `scripts/enroll.ts` | `npm run monarch:enroll`: one-time login from a laptop (or `--import` an old SDK session) to get a trusted device UUID + token |
+| `src/monarch/ops/*.ts` | GraphQL documents (`*_Q` exports, validated by `npm run check-ops`) and result types, one file per domain |
+| `src/tools/registry.ts` | `ToolDef`, `defineTool`, `jsonArg` (official tools pass structured args as JSON strings) |
+| `src/tools/read/*.ts`, `src/tools/write/*.ts` | One official tool per export; names are the official PascalCase names |
+| `src/tools/lib/*.ts` | Pure mappers (filters, aggregation, ownership, account types, recurring buckets, cents) with unit tests |
+| `src/tools/index.ts` | The registry in official order; write tools only when `MONARCH_ENABLE_WRITES=1` |
+| `src/rest/router.ts` | `POST /tools/:name` and `GET /tools`, derived from the registry |
+| `src/mcp/server.ts` | Streamable HTTP transport; registers every registry entry |
+| `openapi.yaml` (gitignored) | Generated by `PUBLIC_URL=<url> npm run gen-openapi` from the registry; 17 read operations unless `MONARCH_ENABLE_WRITES=1` at generation time (GPT Actions cap 30 per action) |
+| `scripts/smoke.ts` | Live, read-only check of every read tool; refuses write tools |
+| `scripts/extract-schema.ts` | Refreshes `schema/monarch.graphql` and dumps the web app's operations to `.cache/web-app-ops/` (gitignored) from the web bundle |
 
-When you add a capability, add it once in `handlers.ts`, then wire it through
-both `rest/router.ts` and `mcp/tools.ts` (and `openapi.yaml` if you want GPT
-to see it).
+To add or change a tool: edit its file under `src/tools/`, keep its name and
+arguments matching the official connector, add any new GraphQL document to
+`src/monarch/ops/` (run `npm run check-ops`), append new tools to
+`src/tools/index.ts`, and regenerate `openapi.yaml`. MCP, REST, and OpenAPI
+all derive from the registry; nothing else to wire.
 
 ## Commands
 
-Runs on Node 24+ with native TypeScript stripping — no build step, no `dist/`.
+Runs on Node 24+ with native TypeScript stripping: no build step, no `dist/`.
 
 ```bash
 npm run dev        # node --watch src/index.ts
 npm run typecheck  # tsc --noEmit (purely a check; no JS emitted)
+npm test           # node:test + check-ops (offline)
+npm run smoke      # live read-only tool calls against the configured account
+npm run gen-openapi  # regenerate openapi.yaml (PUBLIC_URL=<url>)
 npm start          # node src/index.ts
 ```
 
-Local smoke test:
+Local check:
 
 ```bash
-curl -H "X-API-Key: $WRAPPER_API_KEY" http://localhost:8080/accounts | jq
+KEY=$(grep WRAPPER_API_KEY .env | cut -d= -f2)
+curl -s -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d '{}' localhost:8080/tools/GetTags
 npx @modelcontextprotocol/inspector   # connect to /mcp with Authorization: Bearer
 ```
 
+**Never run write tools against the owner's account during development.**
+The account is real and there is no test account. Write handlers are covered
+by unit tests with a scripted fake client (`test/helpers/fake-monarch.ts`).
+
 ## Things not to "fix"
 
-- **`createRequire` in `src/monarch-client.ts`.** `monarchmoney@1.1.3` ships
-  a broken ESM dist (extensionless internal imports rejected by Node strict
-  ESM). The CJS load is intentional. Revisit only after upgrading and
-  confirming `import { MonarchClient } from 'monarchmoney'` works under
-  `"type": "module"`.
-- **Dual-mode auth — don't collapse it.** OAuth 2.1 (better-auth) and the
+- **Dual-mode auth: don't collapse it.** OAuth 2.1 (better-auth) and the
   static `WRAPPER_API_KEY` are BOTH valid auth paths and must stay that way:
   the OAuth path is for claude.ai's Custom Connector (which requires it); the
   static-key path is for Custom GPT Actions (`X-API-Key`) and Claude Desktop
@@ -77,16 +92,26 @@ npx @modelcontextprotocol/inspector   # connect to /mcp with Authorization: Bear
   surface. `WRAPPER_API_KEY` is also the password for the OAuth user (single
   source of truth), so even if you removed the static-key short-circuit, the
   secret would still need to exist. The OAuth path supports **N pre-registered
-  clients** (one per third-party connector — claude, chatgpt, etc.), managed
+  clients** (one per third-party connector: claude, chatgpt, etc.), managed
   via the `npm run deploy:*-client` CLI commands.
 - **`oidcProvider` over `@better-auth/oauth-provider` is deliberate** (see
   the comment in `src/auth/verifier.ts`). The two plugins have a
   trustedClients-vs-JWT-access-tokens tradeoff; we picked trustedClients +
   consent-bypass and made the verifier handle both opaque and JWT tokens.
   Don't "fix" the deprecation warning without rereading that comment first.
-- **Read-only.** v1 deliberately exposes no write tools. Adding
-  create/update/delete tools requires an explicit `confirm: true` argument
-  pattern and a user conversation, not a vibe.
+- **Writes stay behind `MONARCH_ENABLE_WRITES`.** Deployments default to
+  read-only. Do not add a `confirm` argument: the official tools have none
+  and MCP clients gate non-read-only tools themselves. Keep `dry_run` where
+  the official tools have it.
+- **GraphQL quirks that look like bugs.** `aggregates` errors if the
+  selection names a groupBy dimension that was not requested or selects
+  `summary.sumTransfer`. Rule criteria come back lowercased.
+  `deleteTransactionRule` returns `deleted: false` on success. Splits must be
+  whole cents that sum exactly. There is no create-merchant mutation
+  (merchants are created by name); `deleteMerchant` needs
+  `moveRelationsToMerchantId` and is the merge primitive.
+- **Tool names and arguments are the official contract.** Renaming a tool or
+  a parameter breaks prompts written against the official connector.
 
 ## Deployment
 
@@ -99,22 +124,31 @@ Secrets live in Google Secret Manager:
 | Secret | Purpose |
 |---|---|
 | `monarch-email`, `monarch-password`, `monarch-mfa` | Monarch login credentials |
-| `wrapper-api-key` | Static auth token (also reused as OAuth user password) |
-| `monarch-session` | Persisted Monarch session token (skips re-login on cold start) |
+| `monarch-device-uuid` | Device UUID Monarch trusts for this login. Written by `npm run monarch:enroll`; a new UUID risks CAPTCHA / email OTP on login |
+| `wrapper-api-key` | Static auth token (also the OAuth user's password at first seed; rotating it does not re-seed) |
+| `monarch-session` | Persisted `{token, deviceUuid}` JSON (legacy bare token still accepted). Seeded by `deploy:bootstrap` / `deploy:rotate-secrets` from `.monarch-session.json`; the runtime adds a version after each login |
 | `oauth-state` | Single JSON blob holding all better-auth state (users, sessions, refresh tokens, JWKS keys). Versioned, write-through cached by `secret-manager-adapter.ts`. |
-| `oauth-clients` | Single JSON-array blob — one entry per pre-registered trusted OAuth client (`name`, `clientId`, `clientSecret`, `redirects`, `skipConsent`). Managed via `npm run deploy:new-client|list-clients|remove-client`. Read at boot by `src/auth/oauth-clients.ts`. |
+| `oauth-clients` | Single JSON-array blob, one entry per pre-registered trusted OAuth client (`name`, `clientId`, `clientSecret`, `redirects`, `skipConsent`). Managed via `npm run deploy:new-client|list-clients|remove-client`. Read at boot by `src/auth/oauth-clients.ts`. |
 | `auth-user-email` | Email for the seeded single user |
 
 Mounted as env via `--set-secrets` by `scripts/deploy.ts`, EXCEPT
-`oauth-clients` — the runtime reads it via the Secret Manager API directly
-so `--new-client` / `--remove-client` can take effect with just a revision
-bump (no redeploy).
+`oauth-clients`, `oauth-state`, and `monarch-session`, which the runtime
+reads and writes through the Secret Manager API directly (so `--new-client` /
+`--remove-client` take effect with just a revision bump). A secret created
+after bootstrap gets the runtime SA's `secretAccessor` binding automatically.
+`MONARCH_ENABLE_WRITES` is a plain env var forwarded from `.env` on every
+deploy.
 
 ## Known risks
 
 - Monarch's private GraphQL changes occasionally (domain moved from
-  `api.monarchmoney.com` → `api.monarch.com` historically). Pin the SDK
-  version and treat unexpected GraphQL errors as a signal to bump
-  `monarchmoney` and retest, not as a bug in this codebase.
+  `api.monarchmoney.com` → `api.monarch.com` in early 2026). Treat an
+  unexpected GraphQL error as a signal to run `npm run extract-schema` and
+  `npm run check-ops`, which show exactly which documents broke.
 - MFA is TOTP; clock drift on the host will cause auth failures. Cloud Run
-  is fine, local can drift.
+  is fine, local can drift. A TOTP code cannot be reused inside its 30 s
+  window.
+- Login from an unknown `Device-UUID` can return `EMAIL_OTP_REQUIRED` or
+  `CAPTCHA_REQUIRED`. Keep `MONARCH_DEVICE_UUID` stable; never generate a new
+  one on Cloud Run. Requests without a browser-like `User-Agent` get a
+  Cloudflare 403.

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { defineTool, isoDate } from '../registry.ts';
 import { getMonarch } from '../../monarch/session.ts';
 import { NET_WORTH_Q, ACCOUNT_SNAPSHOTS_Q, type NetWorthData, type AccountSnapshotsData } from '../../monarch/ops/snapshots.ts';
-import { thinToWeekly } from '../lib/net-worth.ts';
+import { defaultInterval, thinReadings } from '../lib/net-worth.ts';
 import { accountScopeInput, accountTypeFilters, fetchAccounts, scopeIsNarrowed } from './accounts.ts';
 
 export const GetNetWorthHistory = defineTool({
@@ -11,7 +11,8 @@ export const GetNetWorthHistory = defineTool({
   description: `Get the user's net worth over time, with optional per-account breakdown.
 
 Returns dated readings of total net worth, total assets, and total liabilities.
-For ranges over 60 days the readings are weekly; otherwise daily.`,
+By default readings are daily for ranges up to 31 days, weekly up to 92 days,
+and monthly beyond that.`,
   readOnly: true,
   idempotent: true,
   input: {
@@ -23,6 +24,11 @@ For ranges over 60 days the readings are weekly; otherwise daily.`,
       .optional()
       .default(false)
       .describe('when true, each reading also includes per-account balances and the response includes per-account changes over the period — useful for "what drove the change?" questions.'),
+    interval: z
+      .enum(['day', 'week', 'month'])
+      .nullable()
+      .optional()
+      .describe("'day', 'week', or 'month' to override the default reading interval when finer detail is needed."),
   },
   handler: async (a) => {
     const c = await getMonarch();
@@ -34,15 +40,18 @@ For ranges over 60 days the readings are weekly; otherwise daily.`,
     const d = await c.query<NetWorthData>(NET_WORTH_Q, {
       filters: { startDate: a.start_date, endDate: end, accountFilters: Object.keys(af).length ? af : null },
     });
-    const readings = thinToWeekly(
+    const interval = a.interval ?? defaultInterval(a.start_date, end);
+    const readings = thinReadings(
       d.aggregateSnapshots.map((s) => ({ date: s.date, net_worth: s.balance, assets: s.assetsBalance ?? 0, liabilities: Math.abs(s.liabilitiesBalance ?? 0) })),
+      interval,
     );
     const first = readings[0];
     const last = readings.at(-1);
     const out: Record<string, unknown> = {
       start_date: a.start_date,
       end_date: end,
-      granularity: readings.length && readings.length < d.aggregateSnapshots.length ? 'weekly' : 'daily',
+      interval,
+      granularity: { day: 'daily', week: 'weekly', month: 'monthly' }[interval],
       readings,
       change: first && last ? { net_worth: last.net_worth - first.net_worth, assets: last.assets - first.assets, liabilities: last.liabilities - first.liabilities } : null,
     };

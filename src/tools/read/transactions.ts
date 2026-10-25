@@ -23,7 +23,7 @@ export function filterContext(c: MonarchClient): FilterContext {
     resolveMerchantIds: async (names) => {
       const ids: string[] = [];
       for (const n of names) {
-        const d = await c.query<MerchantsData>(GET_MERCHANTS_Q, { search: n, limit: 25, orderBy: 'TRANSACTION_COUNT' });
+        const d = await c.query<MerchantsData>(GET_MERCHANTS_Q, { search: n, limit: 25, orderBy: 'TRANSACTION_COUNT', includeMerchantsWithoutTransactions: true });
         ids.push(...d.merchants.map((m) => m.id));
       }
       return ids;
@@ -96,8 +96,9 @@ export const GetTransactions = defineTool({
   description: `Search and list the authenticated user's transactions.
 
 Supports fuzzy merchant/account/category matching, business-entity filters,
-review-state filters, and free-text search. Returns LLM-friendly JSON with
-formatted amounts. Use this for natural-language queries like "my biggest
+review-state and pending-status filters, and free-text search. Returns
+LLM-friendly JSON with formatted amounts and each transaction's \`pending\`
+status. Use this for natural-language queries like "my biggest
 restaurant charges last month" or "transactions that need review."
 
 Each transaction includes the IDs of its associated entities (\`merchant_id\`,
@@ -116,7 +117,14 @@ the referenced entities.`,
       .describe(
         `JSON string of filters. Omit it or pass "{}" for defaults (transaction_type = 'All', visible-only, no category/merchant/account constraints). transaction_type is 'Credit', 'Debit', or 'All'. To filter by category, pass category_ids (stable IDs from GetCategories or a transaction's category_id) and/or categories (category or category-group NAMES); both are accepted and combined. Also: merchant_ids, merchants (names), account_ids, accounts (names), tag_ids, business_entity_ids, needs_review, is_recurring, has_notes, has_attachments, is_split, is_pending, is_uncategorized, abs_amount_gte, abs_amount_lte, search, include_hidden.`,
       ),
-    limit: z.number().int().optional().default(100).describe('maximum transactions to return.'),
+    limit: z.number().int().min(1).max(100).optional().default(100).describe('maximum transactions to return (1-100, default 100).'),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .default(0)
+      .describe('number of matching transactions to skip, for paging. When more transactions match than were returned, the response includes `next_offset` to pass here.'),
     sort_by: z
       .enum(['date', 'inverse_date', 'amount', 'inverse_amount'])
       .optional()
@@ -140,11 +148,15 @@ the referenced entities.`,
       return { total_count: d.allTransactions.totalCount };
     }
     const limit = a.include_details ? Math.min(a.limit ?? 100, 20) : (a.limit ?? 100);
-    const d = await c.query<TransactionsData>(GET_TRANSACTIONS_Q, { filters: gql, limit, offset: 0, orderBy: a.sort_by ?? 'date' });
+    const offset = a.offset ?? 0;
+    const d = await c.query<TransactionsData>(GET_TRANSACTIONS_Q, { filters: gql, limit, offset, orderBy: a.sort_by ?? 'date' });
     const results = d.allTransactions.results;
+    const next = offset + results.length;
     return {
       total_count: d.allTransactions.totalCount,
       returned: results.length,
+      offset,
+      next_offset: results.length && next < d.allTransactions.totalCount ? next : null,
       total_amount: results.reduce((s, t) => s + t.amount, 0),
       transactions: results.map((t) => shapeTransaction(t, a.include_details ?? false)),
     };

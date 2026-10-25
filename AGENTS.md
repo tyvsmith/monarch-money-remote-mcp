@@ -2,8 +2,10 @@
 
 Single-tenant Cloud Run service that exposes one Monarch Money account to
 Claude and ChatGPT (via MCP) and Custom GPT (via REST + OpenAPI). It mirrors
-the official Monarch MCP's 41-tool contract over Monarch's private GraphQL
-API while the official connector is paused.
+the official Monarch MCP's 42-tool contract (as of its 2026-10-21 relaunch)
+over Monarch's private GraphQL API. The official one is OAuth-only and excludes
+Finicity-synced accounts; this one also serves Custom GPT Actions and has no
+weekly usage cap.
 
 ## Architecture in 10 seconds
 
@@ -111,7 +113,11 @@ by unit tests with a scripted fake client (`test/helpers/fake-monarch.ts`).
   (merchants are created by name); `deleteMerchant` needs
   `moveRelationsToMerchantId` and is the merge primitive.
 - **Tool names and arguments are the official contract.** Renaming a tool or
-  a parameter breaks prompts written against the official connector.
+  a parameter breaks prompts written against the official connector. Every
+  data tool gets the official `intent` / `intent_description` arguments from
+  `defineTool` automatically (optional here, never forwarded); `ReportIssue`
+  opts out with `noIntent`. The `merchant_name` / `set_merchant_name`
+  conveniences are a superset the official connector dropped; keep them.
 
 ## Deployment
 

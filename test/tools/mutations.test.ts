@@ -15,3 +15,10 @@ test('joins message and field errors', () => {
     (e: unknown) => e instanceof ToolInputError && /CreateTag: bad; name: taken/.test((e as Error).message),
   );
 });
+
+test('accepts a single error object, as the schema declares for the rule mutations', () => {
+  assert.throws(
+    () => assertNoPayloadErrors({ errors: { message: 'Invalid category' } }, 'UpdateRule'),
+    (e: unknown) => e instanceof ToolInputError && /UpdateRule: Invalid category/.test((e as Error).message),
+  );
+});

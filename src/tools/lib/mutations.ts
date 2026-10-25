@@ -6,9 +6,10 @@ export interface PayloadError {
   fieldErrors?: Array<{ field: string; messages: string[] }> | null;
 }
 
-/** Monarch mutations report validation problems in a payload-level errors list rather than as GraphQL errors. */
-export function assertNoPayloadErrors(payload: { errors?: PayloadError[] | null } | null | undefined, what: string): void {
-  const errs = payload?.errors ?? [];
+/** Monarch mutations report validation problems in a payload-level `errors` field (a list or, per the schema for some mutations, a single object) rather than as GraphQL errors. */
+export function assertNoPayloadErrors(payload: { errors?: PayloadError[] | PayloadError | null } | null | undefined, what: string): void {
+  const raw = payload?.errors;
+  const errs = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
   if (!errs.length) return;
   const parts: string[] = [];
   for (const e of errs) {

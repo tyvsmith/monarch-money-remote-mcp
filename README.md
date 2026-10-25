@@ -1,13 +1,15 @@
 # monarch-money-remote-mcp
 
-> **Status: stand-in for the paused official connector.** Monarch shipped an
-> official [MCP connector](https://help.monarch.com/hc/en-us/articles/50207234679956-Monarch-MCP-Connector)
-> in June 2026 and paused it on June 29 over a data-portability question from
-> a data provider. This service mirrors that connector's 41-tool contract
-> (same names, arguments, and semantics) over Monarch's private GraphQL API so
-> prompts and workflows written against the official one keep working. When
-> Monarch restores it, point clients at `https://api.monarch.com/mcp` directly;
-> this service then becomes a fallback.
+> **Status: self-hosted mirror of the official connector.** Monarch's official
+> [MCP connector](https://help.monarch.com/hc/en-us/articles/50207234679956-Monarch-MCP-Connector)
+> (`https://api.monarch.com/mcp`) shipped in June 2026, paused on June 29, and
+> relaunched on 2026-10-21. This service mirrors its 42-tool contract (same
+> names, arguments, and semantics, verified against the live `tools/list` on
+> 2026-10-24) over Monarch's private GraphQL API. Reasons to keep running it:
+> Custom GPT Actions (the official one is OAuth-only), accounts synced through
+> Finicity (excluded from the official one), and no weekly usage cap. Every
+> data tool accepts the official `intent` / `intent_description` arguments; here
+> they are optional and not forwarded anywhere.
 
 Single-tenant Cloud Run service that exposes a Monarch Money account to
 **Claude Custom Connector** (MCP over Streamable HTTP), **ChatGPT
@@ -17,7 +19,7 @@ Tools: the 17 official read tools (`GetAccounts`, `GetTransactions`,
 `GetBudget`, `GetCashFlow`, `GetCategories`, `GetGoals`, `GetInvestments`,
 `GetMerchants`, `GetNetWorthHistory`, `GetRealEstate`, `GetRecurring`,
 `GetSpendingByCategory`, `GetTags`, `GetCreditScoreHistory`,
-`GetHouseholdMembers`, `GetBusinesses`, `ListRules`) plus the 24 write tools
+`GetHouseholdMembers`, `GetBusinesses`, `ListRules`) plus the 25 write tools
 (transactions, splits, bulk edits, categories, tags, merchants, rules, goals,
 balance history, `ReportIssue`). **Writes are off by default**; set
 `MONARCH_ENABLE_WRITES=1` on the service to expose them.

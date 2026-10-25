@@ -14,6 +14,7 @@ On this server reports go to the service log only (Cloud Run logging); nothing i
 Monarch. Avoid pasting raw user financial data into these fields when you can describe the
 problem without it.`,
   readOnly: false,
+  noIntent: true,
   destructive: false,
   idempotent: true,
   input: {

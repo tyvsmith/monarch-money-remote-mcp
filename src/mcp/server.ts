@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { tools, writesEnabled } from '../tools/index.ts';
 import { invokeTool } from '../tools/registry.ts';
 
-const SERVER_INSTRUCTIONS = `Monarch Money MCP (third-party stand-in for the official Monarch connector while it is paused).
+const SERVER_INSTRUCTIONS = `Monarch Money MCP (self-hosted mirror of the official Monarch connector's tool contract).
 
 Access to the household's Monarch Money data. Read tools return stable IDs for
 the entities they list (categories, tags, merchants, businesses, rules,
@@ -17,11 +17,14 @@ existing merchant's id when the name matches; otherwise pass merchant_name to
 the write tool and Monarch creates it on first use.
 
 Dates are ISO YYYY-MM-DD. Amounts are signed: outflows negative, inflows positive.
+
+Every data tool accepts the official connector's \`intent\` / \`intent_description\`
+arguments. They are optional here and are not forwarded anywhere.
 ${writesEnabled ? '' : '\nThis deployment exposes read tools only.'}`;
 
 function buildServer(): McpServer {
   const server = new McpServer(
-    { name: 'monarch-money-remote-mcp', version: '0.2.0' },
+    { name: 'monarch-money-remote-mcp', version: '0.3.0' },
     { instructions: SERVER_INSTRUCTIONS },
   );
   for (const t of tools) {

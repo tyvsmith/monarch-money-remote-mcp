@@ -20,7 +20,7 @@ import { GetTags } from './read/tags.ts';
 import { CreateTag, UpdateTag, DeleteTag } from './write/tags.ts';
 import { CreateCategory, UpdateCategory, DeleteCategory } from './write/categories.ts';
 import { CreateMerchant, UpdateMerchant, MergeMerchants } from './write/merchants.ts';
-import { CreateRule, DeleteRule } from './write/rules.ts';
+import { CreateRule, UpdateRule, DeleteRule } from './write/rules.ts';
 import { CreateTransaction, UpdateTransaction, DeleteTransaction } from './write/transactions.ts';
 import { BulkUpdateTransactions, BulkRecategorizeTransactions } from './write/bulk.ts';
 import { UpdateTransactionSplits } from './write/splits.ts';
@@ -57,6 +57,7 @@ const ordered = [
   UpdateMerchant,
   MergeMerchants,
   CreateRule,
+  UpdateRule,
   DeleteRule,
   CreateTransaction,
   UpdateTransaction,

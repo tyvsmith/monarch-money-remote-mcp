@@ -4,7 +4,7 @@ import { GET_MERCHANT_Q, GET_MERCHANTS_Q, type MerchantData, type MerchantsData 
 import { ToolInputError } from '../registry.ts';
 
 export async function findMerchantByExactName(c: MonarchClient, name: string): Promise<{ id: string; name: string } | null> {
-  const d = await c.query<MerchantsData>(GET_MERCHANTS_Q, { search: name, limit: 50, orderBy: 'TRANSACTION_COUNT' });
+  const d = await c.query<MerchantsData>(GET_MERCHANTS_Q, { search: name, limit: 50, orderBy: 'TRANSACTION_COUNT', includeMerchantsWithoutTransactions: true });
   return d.merchants.find((m) => m.name.toLowerCase() === name.trim().toLowerCase()) ?? null;
 }
 

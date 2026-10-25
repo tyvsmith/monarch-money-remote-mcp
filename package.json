@@ -1,6 +1,6 @@
 {
   "name": "monarch-money-remote-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Single-tenant Cloud Run bridge exposing Monarch Money as MCP (for Claude) and REST (for Custom GPT Actions)",
   "license": "Apache-2.0",

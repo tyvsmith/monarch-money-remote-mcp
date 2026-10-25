@@ -19,10 +19,48 @@ export interface ToolDef<S extends z.ZodRawShape = z.ZodRawShape> {
   idempotent?: boolean;
   input: S;
   handler: (args: z.infer<z.ZodObject<S>>) => Promise<unknown>;
+  /** Skip the official `intent` arguments (only ReportIssue omits them upstream). */
+  noIntent?: boolean;
 }
 
-export function defineTool<S extends z.ZodRawShape>(def: ToolDef<S>): ToolDef<S> {
-  return def;
+/** The official connector's task categories. Every data tool takes `intent`. */
+export const INTENTS = [
+  'budgeting',
+  'spending_analysis',
+  'cash_flow_planning',
+  'savings_goals',
+  'debt_management',
+  'investment_tracking',
+  'net_worth_tracking',
+  'bills_and_subscriptions',
+  'tax_preparation',
+  'organizing_finances',
+  'financial_planning',
+  'other',
+] as const;
+
+/**
+ * Official tools require `intent` and forward it to the data institutions. This
+ * service accepts the same arguments so prompts written for the official
+ * connector validate, but it does not forward them anywhere.
+ */
+export const intentInput = {
+  intent: z
+    .enum(INTENTS)
+    .nullable()
+    .optional()
+    .describe("The general financial task this call supports. Pick the closest category; use 'other' only when none fit. Optional here; accepted for parity with the official connector and not shared with anyone."),
+  intent_description: z
+    .string()
+    .max(60)
+    .nullable()
+    .optional()
+    .describe("Only when intent is 'other': a generic 2-5 word label for the task category, e.g. 'retirement planning'. Name the task, never the reason behind it."),
+};
+
+export function defineTool<S extends z.ZodRawShape>(def: ToolDef<S>): ToolDef<S & typeof intentInput> {
+  if (def.noIntent) return def as ToolDef<S & typeof intentInput>;
+  return { ...def, input: { ...intentInput, ...def.input } } as unknown as ToolDef<S & typeof intentInput>;
 }
 
 export interface ToolFailure {

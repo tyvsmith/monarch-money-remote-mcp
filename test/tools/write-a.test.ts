@@ -4,7 +4,7 @@ import { installFakeMonarch } from '../helpers/fake-monarch.ts';
 import { CreateTag, UpdateTag, DeleteTag } from '../../src/tools/write/tags.ts';
 import { CreateCategory, UpdateCategory, DeleteCategory } from '../../src/tools/write/categories.ts';
 import { CreateMerchant, UpdateMerchant, MergeMerchants } from '../../src/tools/write/merchants.ts';
-import { CreateRule, DeleteRule } from '../../src/tools/write/rules.ts';
+import { CreateRule, UpdateRule, DeleteRule } from '../../src/tools/write/rules.ts';
 import { setMonarchClientForTests } from '../../src/monarch/session.ts';
 
 afterEach(() => setMonarchClientForTests(null));
@@ -89,6 +89,81 @@ test('CreateRule builds criteria and actions and finds the new rule id by diffin
   });
   await assert.rejects(run(CreateRule, { merchant_names: ['x'] }), /at least one criteria and one action/);
   await assert.rejects(run(CreateRule, { merchant_names: ['x'], set_needs_review: true, set_reviewed: true }), /mutually exclusive/);
+});
+
+const baseRule = {
+  id: 'r1', order: 0, lastAppliedAt: null,
+  merchantCriteria: [{ operator: 'contains', value: 'costco' }], merchantNameCriteria: null, originalStatementCriteria: null,
+  amountCriteria: { isExpense: true, operator: 'between', value: null, valueRange: { lower: 10, upper: 50 } },
+  categoryIds: null, categories: null, accountIds: null, accounts: null,
+  setMerchantAction: null, setCategoryAction: { id: 'c', name: 'C' }, addTagsAction: [{ id: 't1', name: 'T' }],
+  setHideFromReportsAction: false, markNeedsReviewAction: false, markReviewedAction: false, reviewStatusAction: 'reviewed',
+  needsReviewByUserAction: null, actionSetOwner: null, actionSetOwnerIsJoint: false, actionSetBusinessEntity: null,
+};
+const fullInput = {
+  id: 'r1', applyToExistingTransactions: false,
+  merchantCriteria: [{ operator: 'contains', value: 'costco' }], merchantNameCriteria: [], originalStatementCriteria: [],
+  amountCriteria: { isExpense: true, operator: 'between', value: null, valueRange: { lower: 10, upper: 50 } },
+  categoryIds: [], accountIds: [],
+  setMerchantAction: null, setCategoryAction: 'c', addTagsAction: ['t1'], setHideFromReportsAction: false, reviewStatusAction: 'reviewed',
+  needsReviewByUserAction: null, actionSetOwner: null, actionSetOwnerIsJoint: false, actionSetBusinessEntity: null,
+};
+const installRule = (rule = baseRule) =>
+  installFakeMonarch({
+    ListRules: { transactionRules: [rule] },
+    UpdateRule: { updateTransactionRuleV2: { transactionRule: { id: 'r1' }, errors: null } },
+    GetMerchant: { merchant: { id: 'm', name: 'Amazon', transactionCount: 1, ruleCount: 0, canBeDeleted: false } },
+  });
+
+test('UpdateRule merges the current rule with the edits and sends the full input', async () => {
+  const f = installRule();
+  const out = await run(UpdateRule, { rule_id: 'r1', merchant_names: ['Amazon', 'AMZN'], set_merchant_id: 'm', add_tag_ids: [] });
+  assert.equal(out.rule_id, 'r1');
+  assert.ok(out.rule);
+  assert.deepEqual(f.byOp('UpdateRule')[0]!.variables, {
+    input: { ...fullInput, merchantCriteria: [{ operator: 'contains', value: 'Amazon' }, { operator: 'contains', value: 'AMZN' }], setMerchantAction: 'Amazon', addTagsAction: [] },
+  });
+});
+
+test('UpdateRule amount semantics: partial bound keeps the other, clear_amount removes or replaces', async () => {
+  let f = installRule();
+  await run(UpdateRule, { rule_id: 'r1', amount_max: 80 });
+  assert.deepEqual(f.byOp('UpdateRule')[0]!.variables.input, { ...fullInput, amountCriteria: { isExpense: true, operator: 'between', valueRange: { lower: 10, upper: 80 } } });
+  f = installRule();
+  await run(UpdateRule, { rule_id: 'r1', clear_amount: true, amount_min: 5 });
+  assert.deepEqual(f.byOp('UpdateRule')[0]!.variables.input, { ...fullInput, amountCriteria: { isExpense: true, operator: 'gt', value: 5 } });
+  f = installRule();
+  await run(UpdateRule, { rule_id: 'r1', clear_amount: true });
+  assert.deepEqual(f.byOp('UpdateRule')[0]!.variables.input, { ...fullInput, amountCriteria: null });
+  f = installRule({ ...baseRule, amountCriteria: { isExpense: false, operator: 'equals', value: 42, valueRange: null } });
+  await run(UpdateRule, { rule_id: 'r1', amount_min: 1 });
+  assert.deepEqual(f.byOp('UpdateRule')[0]!.variables.input.amountCriteria, { isExpense: false, operator: 'gt', value: 1 });
+});
+
+test('UpdateRule clears actions with "" / false and only clears a matching review status', async () => {
+  let f = installRule();
+  await run(UpdateRule, { rule_id: 'r1', set_category_id: '', set_needs_review: false });
+  assert.deepEqual(f.byOp('UpdateRule')[0]!.variables.input, { ...fullInput, setCategoryAction: null });
+  f = installRule();
+  await run(UpdateRule, { rule_id: 'r1', set_reviewed: false, set_hide_from_reports: true });
+  assert.deepEqual(f.byOp('UpdateRule')[0]!.variables.input, { ...fullInput, reviewStatusAction: null, setHideFromReportsAction: true });
+  f = installRule();
+  await run(UpdateRule, { rule_id: 'r1', set_needs_review: true });
+  assert.equal(f.byOp('UpdateRule')[0]!.variables.input.reviewStatusAction, 'needs_review');
+});
+
+test('UpdateRule refuses to clear the last criterion or action, empty edits, and unknown rules', async () => {
+  installRule();
+  await assert.rejects(run(UpdateRule, { rule_id: 'r1', merchant_names: [], clear_amount: true }), /at least one criterion/);
+  await assert.rejects(run(UpdateRule, { rule_id: 'r1', set_category_id: '', add_tag_ids: [], set_reviewed: false }), /at least one action/);
+  await assert.rejects(run(UpdateRule, { rule_id: 'r1' }), /nothing to update/);
+  installRule({ ...baseRule, setCategoryAction: null, addTagsAction: null, reviewStatusAction: null, actionSetOwnerIsJoint: true });
+  await run(UpdateRule, { rule_id: 'r1', set_hide_from_reports: false });
+  installRule();
+  await assert.rejects(run(UpdateRule, { rule_id: 'nope', set_reviewed: true }), /not found/);
+  await assert.rejects(run(UpdateRule, { rule_id: 'r1', set_needs_review: true, set_reviewed: true }), /cannot both be true/);
+  installFakeMonarch({ ListRules: { transactionRules: [baseRule] }, UpdateRule: { updateTransactionRuleV2: { transactionRule: null, errors: [{ message: 'bad' }] } } });
+  await assert.rejects(run(UpdateRule, { rule_id: 'r1', set_reviewed: true }), /UpdateRule: bad/);
 });
 
 test('DeleteRule verifies by listing because the API returns deleted:false', async () => {

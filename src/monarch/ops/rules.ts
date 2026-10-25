@@ -60,6 +60,10 @@ export const CREATE_RULE_Q = /* GraphQL */ `
   mutation CreateRule($input: CreateTransactionRuleInput!) {
     createTransactionRuleV2(input: $input) { errors { message fieldErrors { field messages } } }
   }`;
+export const UPDATE_RULE_Q = /* GraphQL */ `
+  mutation UpdateRule($input: UpdateTransactionRuleInput!) {
+    updateTransactionRuleV2(input: $input) { transactionRule { id } errors { message fieldErrors { field messages } } }
+  }`;
 export const DELETE_RULE_Q = /* GraphQL */ `
   mutation DeleteRule($id: ID!) {
     deleteTransactionRule(id: $id) { deleted errors { message } }

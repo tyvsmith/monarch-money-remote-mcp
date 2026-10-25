@@ -1,9 +1,20 @@
-/** Official behavior: weekly readings for ranges over 60 days, daily otherwise. */
-export function thinToWeekly<T extends { date: string }>(rows: T[]): T[] {
-  if (rows.length === 0) return rows;
-  const days = (Date.parse(rows.at(-1)!.date) - Date.parse(rows[0]!.date)) / 86_400_000;
-  if (days <= 60) return rows;
-  const out = rows.filter((_, i) => i % 7 === 0);
+export type Interval = 'day' | 'week' | 'month';
+
+/** Official default: daily up to 31 days, weekly up to 92 days, monthly beyond. */
+export function defaultInterval(startDate: string, endDate: string): Interval {
+  const days = (Date.parse(endDate) - Date.parse(startDate)) / 86_400_000;
+  if (days <= 31) return 'day';
+  if (days <= 92) return 'week';
+  return 'month';
+}
+
+/** Thin daily snapshots to the requested interval, always keeping the first and last reading. */
+export function thinReadings<T extends { date: string }>(rows: T[], interval: Interval): T[] {
+  if (rows.length === 0 || interval === 'day') return rows;
+  const out =
+    interval === 'week'
+      ? rows.filter((_, i) => i % 7 === 0)
+      : rows.filter((r, i) => i === 0 || r.date.slice(0, 7) !== rows[i - 1]!.date.slice(0, 7));
   if (out.at(-1) !== rows.at(-1)) out.push(rows.at(-1)!);
   return out;
 }

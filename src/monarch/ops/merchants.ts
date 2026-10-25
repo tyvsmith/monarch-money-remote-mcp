@@ -1,6 +1,6 @@
 export const GET_MERCHANTS_Q = /* GraphQL */ `
-  query GetMerchants($search: String, $limit: Int, $orderBy: MerchantOrdering) {
-    merchants(search: $search, limit: $limit, orderBy: $orderBy, includeMerchantsWithoutTransactions: true) {
+  query GetMerchants($search: String, $limit: Int, $orderBy: MerchantOrdering, $includeMerchantsWithoutTransactions: Boolean) {
+    merchants(search: $search, limit: $limit, orderBy: $orderBy, includeMerchantsWithoutTransactions: $includeMerchantsWithoutTransactions) {
       id name transactionCount
     }
   }`;
